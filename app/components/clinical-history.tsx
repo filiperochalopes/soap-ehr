@@ -45,9 +45,18 @@ export function ClinicalHistory(props: { notes: ClinicalHistoryItem[]; timeZone:
                   <div>{note.kind === "soap" ? t("clinicalHistory.kindSoap") : t("clinicalHistory.kindNarrative")}</div>
                 </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div
+                className={
+                  note.sections.length > 1
+                    ? "md:columns-2 md:gap-3"
+                    : undefined
+                }
+              >
                 {note.sections.map((section, index) => (
-                  <section key={`${note.id}-${index}`}>
+                  <section
+                    className={note.sections.length > 1 ? "mb-3 break-inside-avoid" : undefined}
+                    key={`${note.id}-${index}`}
+                  >
                     <h4 className="field-label">{section.title}</h4>
                     <p className="whitespace-pre-wrap text-sm">{section.text}</p>
                   </section>
