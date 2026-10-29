@@ -85,6 +85,8 @@ const appointmentResourceSchema = z.object({
 });
 
 export type FhirStore = {
+  deleteAppointment: (appointmentId: string) => Promise<boolean>;
+  deletePatient: (patientId: string) => Promise<boolean>;
   getAppointment: (appointmentId: string) => Promise<FhirResource | null>;
   getPatient: (patientId: string) => Promise<FhirResource | null>;
   getRelatedResource: (
@@ -314,6 +316,14 @@ function jsonEquals(left: unknown, right: unknown) {
 }
 
 class PrismaFhirStore implements FhirStore {
+  async deleteAppointment(_appointmentId: string): Promise<boolean> {
+    throw new Error("FHIR deletion is available only in API_DRY_RUN mode.");
+  }
+
+  async deletePatient(_patientId: string): Promise<boolean> {
+    throw new Error("FHIR deletion is available only in API_DRY_RUN mode.");
+  }
+
   async searchPatients({ name }: { name: string | null }) {
     const patients = await prisma.patient.findMany({
       where: name
@@ -560,6 +570,20 @@ class MemoryFhirStore implements FhirStore {
     ["Observation", new Map()],
   ]);
   private sequence = new Map<string, number>();
+
+  async deleteAppointment(appointmentId: string) {
+    return this.appointments.delete(appointmentId);
+  }
+
+  async deletePatient(patientId: string) {
+    const hasAppointment = [...this.appointments.values()].some(
+      (appointment) => resourceReferenceId(appointmentPatientReference(appointment), "Patient") === patientId,
+    );
+    if (hasAppointment) {
+      throw new Error("Cannot delete Patient while Appointment resources still reference it.");
+    }
+    return this.patients.delete(patientId);
+  }
 
   async searchPatients({ name }: { name: string | null }) {
     const normalizedName = name?.toLowerCase();

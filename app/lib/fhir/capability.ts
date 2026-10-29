@@ -39,6 +39,7 @@ export function capabilityStatement(baseUrl: string) {
               { code: "create" },
               { code: "update" },
               { code: "patch" },
+              { code: "delete" },
             ],
           },
           {
@@ -49,6 +50,7 @@ export function capabilityStatement(baseUrl: string) {
               { code: "create" },
               { code: "update" },
               { code: "patch" },
+              { code: "delete" },
             ],
             searchInclude: ["Appointment:patient"],
           },

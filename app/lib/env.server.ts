@@ -27,6 +27,13 @@ const envSchema = z.object({
         : value,
     z.boolean().default(false),
   ),
+  FHIR_TEST_DELETE_ENABLED: z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value.trim().toLowerCase() === "true"
+        : value,
+    z.boolean().default(false),
+  ),
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),

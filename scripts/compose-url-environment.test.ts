@@ -49,7 +49,7 @@ test("documented Docker URLs target database service DNS names", () => {
   );
 });
 
-test("Compose preserves explicitly encoded migration URLs", () => {
+test("Compose preserves explicitly encoded migration URLs", (t) => {
   const environment = {
     ...process.env,
     DATABASE_URL: databaseUrl,
@@ -69,6 +69,10 @@ test("Compose preserves explicitly encoded migration URLs", () => {
       env: environment,
     });
 
+    if (result.error && "code" in result.error && result.error.code === "ENOENT") {
+      t.skip("Docker CLI is unavailable in this runtime; run this contract on the host.");
+      return;
+    }
     assert.equal(result.status, 0, result.stderr);
     assertServiceUrls(JSON.parse(result.stdout), services);
   }

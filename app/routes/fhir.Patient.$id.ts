@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { requireApiUser } from "~/lib/auth.server";
 import { operationOutcome } from "~/lib/fhir/bundle";
 import { fhirJson } from "~/lib/fhir/capability";
+import { env } from "~/lib/env.server";
 import { FHIR_APP_ERROR_CODES } from "~/lib/fhir/errors";
 import { getFhirStore } from "~/lib/fhir/store.server";
 import { applyFhirPatch, getResourceId } from "~/lib/fhir/write";
@@ -34,12 +35,12 @@ export async function action({
   params: { id?: string };
   request: Request;
 }) {
-  if (request.method !== "PUT" && request.method !== "PATCH") {
+  if (request.method !== "PUT" && request.method !== "PATCH" && request.method !== "DELETE") {
     return fhirJson(
       operationOutcome("error", "not-supported", "Method not allowed."),
       405,
       {
-        Allow: "GET, PUT, PATCH",
+        Allow: "GET, PUT, PATCH, DELETE",
       },
     );
   }
@@ -52,6 +53,17 @@ export async function action({
   const existingPatient = await getFhirStore().getPatient(params.id);
   if (!existingPatient) {
     return fhirJson(operationOutcome("error", "not-found", "Patient not found"), 404);
+  }
+  if (request.method === "DELETE") {
+    if (!env.API_DRY_RUN || !env.FHIR_TEST_DELETE_ENABLED) {
+      return fhirJson(operationOutcome("error", "forbidden", "Deletion is available only in explicitly enabled dry-run mode."), 403);
+    }
+    try {
+      await getFhirStore().deletePatient(params.id);
+      return new Response(null, { status: 204 });
+    } catch (error) {
+      return fhirJson(operationOutcome("error", "conflict", error instanceof Error ? error.message : "Patient deletion failed."), 409);
+    }
   }
 
   try {

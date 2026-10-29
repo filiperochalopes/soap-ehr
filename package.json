@@ -12,7 +12,7 @@
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "test": "node --import tsx --test app/lib/ehr/templates.test.ts scripts/compose-url-environment.test.ts scripts/migrate-mysql-to-postgres.test.ts scripts/omop/transform.test.ts",
+    "test": "node --import tsx --test app/lib/ehr/templates.test.ts app/lib/fhir/store.delete.test.ts scripts/compose-url-environment.test.ts scripts/migrate-mysql-to-postgres.test.ts scripts/omop/transform.test.ts",
     "import:generate": "node --env-file-if-exists=.env --import tsx import/tools/generate-fhir-imports.ts",
     "import:review": "node --env-file-if-exists=.env --import tsx import/tools/review-fhir-imports.ts",
     "prisma:generate": "prisma generate",
