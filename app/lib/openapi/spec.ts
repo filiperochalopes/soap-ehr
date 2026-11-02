@@ -40,6 +40,54 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
     },
     security: [{ bearerAuth: [] }],
     paths: {
+      "/api/reminders/appointments": {
+        get: {
+          summary: "Appointment reminder feed (read-only, minimised)",
+          description:
+            "Booked appointments of one clinic-local day with only what a reminder needs: " +
+            "the appointment id and time, the patient's first name and one normalised mobile " +
+            "number (country code + area code + number, digits only). CPF, birth date, e-mail, " +
+            "surname and every other patient field are never returned. Patients without a " +
+            "usable mobile number and appointments that are not booked are only counted. " +
+            "Every read is audited with counts only. The day uses the time zone configured " +
+            "in the EHR settings.",
+          parameters: [
+            {
+              in: "query",
+              name: "date",
+              required: true,
+              schema: { type: "string", format: "date" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Reminder feed for the day",
+              content: {
+                "application/json": {
+                  example: {
+                    date: "2026-11-10",
+                    timeZone: "America/Bahia",
+                    appointments: [
+                      {
+                        id: "12",
+                        start: "2026-11-10T11:00:00.000Z",
+                        startLocal: "2026-11-10T08:00:00-03:00",
+                        end: "2026-11-10T12:00:00.000Z",
+                        status: "booked",
+                        type: "routine",
+                        patient: { id: "7", firstName: "Maria", phone: "5571999998888" },
+                      },
+                    ],
+                    skipped: { notBooked: 1, noPhone: 0 },
+                  },
+                },
+              },
+            },
+            "400": { description: "date is missing or is not a real YYYY-MM-DD day" },
+            "401": { description: "A valid Bearer token is required" },
+          },
+        },
+      },
       "/fhir/metadata": {
         get: {
           summary: "CapabilityStatement",

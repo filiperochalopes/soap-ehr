@@ -109,6 +109,12 @@ export type FhirStore = {
     includePatient: boolean;
     patient: string | null;
   }) => Promise<AppointmentSearchResult>;
+  /**
+   * Appointments whose start falls in [from, to] (inclusive), with their patients. Used by the
+   * reminder feed, which computes the bounds from the clinic's time zone instead of relying
+   * on the server's local day.
+   */
+  searchAppointmentsBetween: (input: { from: Date; to: Date }) => Promise<AppointmentSearchResult>;
   searchPatients: (input: { name: string | null }) => Promise<FhirResource[]>;
   searchRelatedResources: (input: {
     patient: string | null;
@@ -453,6 +459,56 @@ class PrismaFhirStore implements FhirStore {
     };
   }
 
+  async searchAppointmentsBetween(input: { from: Date; to: Date }) {
+    // Minimisation at the source: only what the reminder feed reads is loaded. CPF, birth
+    // date and the rest of the patient record never leave the database for this query.
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        start: { gte: input.from, lte: input.to },
+        patient: { active: true, mergedIntoPatientId: null },
+      },
+      select: {
+        appointmentType: true,
+        end: true,
+        id: true,
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            telecom: { orderBy: { id: "asc" }, select: { system: true, value: true } },
+          },
+        },
+        patientId: true,
+        start: true,
+        status: true,
+      },
+      orderBy: { start: "asc" },
+    });
+
+    const patients = new Map<number, FhirResource>();
+    for (const { patient } of appointments) {
+      patients.set(patient.id, {
+        resourceType: "Patient",
+        id: String(patient.id),
+        name: [{ text: patient.name }],
+        telecom: patient.telecom.map(({ system, value }) => ({ system, value })),
+      });
+    }
+
+    return {
+      resources: appointments.map((appointment) => ({
+        resourceType: "Appointment",
+        id: String(appointment.id),
+        status: appointment.status,
+        start: appointment.start.toISOString(),
+        end: appointment.end.toISOString(),
+        appointmentType: { text: appointment.appointmentType },
+        participant: [{ actor: { reference: `Patient/${appointment.patientId}` }, status: "accepted" }],
+      })) as FhirResource[],
+      included: [...patients.values()],
+    };
+  }
+
   async getAppointment(appointmentId: string) {
     const id = normalizeNumericId(appointmentId);
     if (!id) {
@@ -650,6 +706,36 @@ class MemoryFhirStore implements FhirStore {
       included: [
         ...new Map(includedPatients.map((patient) => [patient.id ?? "", patient])).values(),
       ],
+    };
+  }
+
+  async searchAppointmentsBetween(input: { from: Date; to: Date }) {
+    const lower = input.from.getTime();
+    const upper = input.to.getTime();
+    const resources = [...this.appointments.values()]
+      .filter((appointment) => {
+        const start = typeof appointment.start === "string" ? new Date(appointment.start).getTime() : NaN;
+        return start >= lower && start <= upper;
+      })
+      .sort((left, right) => new Date(String(left.start)).getTime() - new Date(String(right.start)).getTime())
+      .map(cloneResource);
+
+    const patients = new Map<string, FhirResource>();
+    for (const appointment of resources) {
+      const patientId = resourceReferenceId(appointmentPatientReference(appointment), "Patient");
+      const patient = patientId ? this.patients.get(patientId) : null;
+      if (patientId && patient && patient.active !== false) {
+        patients.set(patientId, cloneResource(patient));
+      }
+    }
+
+    return {
+      // Same rule as the database store: appointments of inactive patients are not listed.
+      resources: resources.filter((appointment) => {
+        const patientId = resourceReferenceId(appointmentPatientReference(appointment), "Patient");
+        return Boolean(patientId && patients.has(patientId));
+      }),
+      included: [...patients.values()],
     };
   }
 

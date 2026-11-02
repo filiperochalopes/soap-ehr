@@ -50,6 +50,7 @@ flowchart LR
 | **Agenda** | Baseada em `Appointment`, com atendimento direto para o registro clínico. |
 | **Registro clínico** | Notas SOAP e narrativas, rascunho local criptografado e histórico de registros anteriores. |
 | **API FHIR** | `Patient`, `Appointment`, `Composition`, `Encounter`, `Observation`, `Condition`, `ClinicalImpression`, `POST /fhir` (Bundle). |
+| **Feed de lembretes** | `GET /api/reminders/appointments?date=AAAA-MM-DD`: somente leitura e minimizado. Devolve, por consulta `booked` do dia (no fuso configurado do EHR), o id, o horário, o **primeiro nome** e **um celular normalizado** (`55` + DDD + número). CPF, nascimento, e-mail e sobrenome nunca saem. Pacientes sem celular válido e consultas que não estão `booked` são apenas contados. Cada leitura é auditada só com contagens. |
 | **Docs da API** | Swagger UI em `/docs` e OpenAPI em `/openapi.json`. |
 | **Interface** | Português do Brasil (pt-BR) por padrão, via i18next. |
 
