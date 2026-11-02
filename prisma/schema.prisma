@@ -75,6 +75,9 @@ model Appointment {
   end             DateTime
   status          String
   appointmentType String   @map("appointment_type")
+  // Patient's answer to the reminder: pending | confirmed | declined | no_response.
+  confirmationStatus String    @default("pending") @map("confirmation_status")
+  confirmationAt     DateTime? @map("confirmation_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -116,6 +119,8 @@ model AuthToken {
   id         Int       @id @default(autoincrement())
   tokenHash  String    @map("token_hash")
   isActive   Boolean   @default(true) @map("is_active")
+  // What the token may reach: full | reminders (see app/lib/auth-scope.ts).
+  scope      String    @default("full")
   lastUsedAt DateTime? @map("last_used_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at")

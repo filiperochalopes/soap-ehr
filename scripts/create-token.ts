@@ -23,7 +23,14 @@ async function main() {
   }
 
   const { addTokenToUser } = await import("../app/lib/auth.server");
+  const { TOKEN_SCOPES, isTokenScope } = await import("../app/lib/auth-scope");
   const { prisma } = await import("../app/lib/prisma.server");
+
+  // `--scope reminders` issues a restricted token (reminder endpoints only). Default: full.
+  const scope = readArg("--scope") ?? "full";
+  if (!isTokenScope(scope)) {
+    throw new Error(`Invalid --scope "${scope}". Use one of: ${TOKEN_SCOPES.join(", ")}.`);
+  }
 
   let userIdStr = readArg("--userId");
 
@@ -69,13 +76,14 @@ async function main() {
     throw new Error(`User with ID ${userId} is inactive.`);
   }
 
-  const { rawToken } = await addTokenToUser(userId);
+  const { rawToken } = await addTokenToUser(userId, scope);
 
   console.log("");
   console.log("Token created");
   console.log(`User ID: ${user.id}`);
   console.log(`Name: ${user.fullName}`);
   console.log(`CRM: ${user.crm}/${user.crmUf}`);
+  console.log(`Scope: ${scope}${scope === "full" ? "" : " (restricted: cannot read patient records)"}`);
   console.log("");
   console.log("Token");
   console.log(rawToken);

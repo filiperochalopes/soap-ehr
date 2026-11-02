@@ -4,11 +4,13 @@ import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { env } from "~/lib/env.server";
 import { prisma } from "~/lib/prisma.server";
 import { writeAuditLog } from "~/lib/audit.server";
+import { isTokenScope, scopeAllows, type TokenScope } from "~/lib/auth-scope";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
 export type AuthContext = {
   tokenId: number;
+  scope: TokenScope;
   user: {
     id: number;
     fullName: string;
@@ -55,7 +57,18 @@ function getTokenFromRequest(request: Request) {
   return cookies[env.COOKIE_NAME];
 }
 
-export async function authenticateToken(rawToken: string | null | undefined) {
+/**
+ * Resolves a raw token to its context, or null.
+ *
+ * `requiredScope` defaults to `full`, so every caller that existed before scopes (login, the
+ * UI session, the FHIR API) keeps working for full tokens and automatically REFUSES a
+ * restricted token. Only a caller that explicitly asks for a narrower scope (the reminder
+ * endpoints) accepts one. The check runs before `lastUsedAt` is touched.
+ */
+export async function authenticateToken(
+  rawToken: string | null | undefined,
+  requiredScope: TokenScope = "full",
+) {
   if (!rawToken) {
     return null;
   }
@@ -70,6 +83,10 @@ export async function authenticateToken(rawToken: string | null | undefined) {
     return null;
   }
 
+  if (!isTokenScope(authToken.scope) || !scopeAllows(authToken.scope, requiredScope)) {
+    return null;
+  }
+
   if (!env.API_DRY_RUN) {
     await prisma.authToken.update({
       where: { id: authToken.id },
@@ -79,6 +96,7 @@ export async function authenticateToken(rawToken: string | null | undefined) {
 
   return {
     tokenId: authToken.id,
+    scope: authToken.scope,
     user: {
       id: authToken.user.id,
       fullName: authToken.user.fullName,
@@ -88,9 +106,9 @@ export async function authenticateToken(rawToken: string | null | undefined) {
   } satisfies AuthContext;
 }
 
-export async function getAuthContext(request: Request) {
+export async function getAuthContext(request: Request, requiredScope: TokenScope = "full") {
   const rawToken = getTokenFromRequest(request);
-  return authenticateToken(rawToken);
+  return authenticateToken(rawToken, requiredScope);
 }
 
 export async function requireUserSession(request: Request) {
@@ -114,6 +132,31 @@ export async function requireApiUser(request: Request) {
       JSON.stringify({
         error: "Unauthorized",
         message: "A valid Bearer token is required.",
+      }),
+      {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": "Bearer",
+        },
+      },
+    );
+  }
+
+  return auth;
+}
+
+/**
+ * API guard for endpoints that a restricted token may reach (today: the reminder endpoints).
+ * A `full` token passes too; a token of any other scope passes only for its own scope.
+ */
+export async function requireApiScope(request: Request, requiredScope: TokenScope) {
+  const auth = await getAuthContext(request, requiredScope);
+  if (!auth) {
+    throw new Response(
+      JSON.stringify({
+        error: "Unauthorized",
+        message: "A valid Bearer token with access to this endpoint is required.",
       }),
       {
         status: 401,
@@ -160,12 +203,16 @@ export async function createUserToken(input: {
   return { rawToken, user };
 }
 
-export async function addTokenToUser(userId: number) {
+export async function addTokenToUser(userId: number, scope: TokenScope = "full") {
+  if (!isTokenScope(scope)) {
+    throw new Error(`Invalid token scope: ${String(scope)}.`);
+  }
+
   const rawToken = createRawToken();
   const tokenHash = hashToken(rawToken);
 
   const token = await prisma.authToken.create({
-    data: { tokenHash, userId },
+    data: { tokenHash, userId, scope },
     include: { user: true },
   });
 
@@ -174,6 +221,7 @@ export async function addTokenToUser(userId: number) {
     category: "auth",
     entityId: String(token.id),
     entityType: "AuthToken",
+    metadata: { scope },
     userId,
   });
 
