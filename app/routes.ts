@@ -8,6 +8,10 @@ export default [
   route("docs", "routes/docs.tsx"),
   route("integrations/docs/webhook", "routes/integrations.docs.webhook.ts"),
   route("api/reminders/appointments", "routes/api.reminders.appointments.ts"),
+  route(
+    "api/reminders/appointments/:appointmentId/response",
+    "routes/api.reminders.appointments.$appointmentId.response.ts",
+  ),
   route("fhir", "routes/fhir.index.ts"),
   route("fhir/metadata", "routes/fhir.metadata.ts"),
   route("fhir/Patient", "routes/fhir.Patient.ts"),

@@ -1,4 +1,14 @@
-import { getFhirStore, type FhirStore } from "~/lib/fhir/store.server";
+import {
+  ConfirmationInputError,
+  parsePatientResponse,
+  type PatientResponse,
+} from "~/lib/appointment-confirmation";
+import {
+  AppointmentNotFoundError,
+  ConfirmationConflictError,
+  getFhirStore,
+  type FhirStore,
+} from "~/lib/fhir/store.server";
 import {
   ReminderInputError,
   buildReminderFeed,
@@ -102,4 +112,70 @@ export async function handleReminderFeedRequest(
   });
 
   return json(feed);
+}
+
+/** The body is a one-field JSON object; anything larger is not a legitimate client. */
+const MAX_RESPONSE_BODY_BYTES = 4096;
+
+export type ReminderResponseDeps = {
+  /** Throws a Response (401) when the caller is not authenticated. */
+  authenticate: (request: Request) => Promise<{ user: { id: number } }>;
+  store?: FhirStore;
+};
+
+/**
+ * POST /api/reminders/appointments/:id/response  body: {"response": "confirmed"|"declined"|"no_response"}
+ *
+ * Records what the patient answered to the reminder. Declining cancels the appointment, which
+ * is how the reception sees the slot free on the agenda. Repeating the same answer is safe
+ * (200, outcome "noop"); a patient who already declined cannot re-confirm (409), because the
+ * slot may have been given away and a person has to decide. The reply carries no patient data.
+ */
+export async function handleReminderResponseRequest(
+  request: Request,
+  appointmentId: string,
+  deps: ReminderResponseDeps,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return json({ error: "method_not_allowed", message: "Use POST." }, 405, { Allow: "POST" });
+  }
+
+  const auth = await deps.authenticate(request);
+
+  const declared = Number(request.headers.get("Content-Length") ?? "0");
+  const raw = declared > MAX_RESPONSE_BODY_BYTES ? null : await request.text();
+  if (raw === null || raw.length > MAX_RESPONSE_BODY_BYTES) {
+    return json({ error: "payload_too_large", message: "Request body is too large." }, 413);
+  }
+
+  let response: PatientResponse;
+  try {
+    const body: unknown = JSON.parse(raw);
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      throw new ConfirmationInputError("Body must be a JSON object.");
+    }
+    response = parsePatientResponse((body as Record<string, unknown>).response);
+  } catch (error) {
+    if (error instanceof ConfirmationInputError || error instanceof SyntaxError) {
+      return json({ error: "invalid_request", message: error instanceof SyntaxError ? "Body is not valid JSON." : error.message }, 400);
+    }
+    throw error;
+  }
+
+  try {
+    const result = await (deps.store ?? getFhirStore()).recordAppointmentResponse(
+      appointmentId,
+      response,
+      auth.user.id,
+    );
+    return json(result);
+  } catch (error) {
+    if (error instanceof AppointmentNotFoundError) {
+      return json({ error: "not_found", message: "Appointment not found." }, 404);
+    }
+    if (error instanceof ConfirmationConflictError) {
+      return json({ error: "conflict", reason: error.reason }, 409);
+    }
+    throw error;
+  }
 }

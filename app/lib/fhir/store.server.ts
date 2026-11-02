@@ -1,6 +1,12 @@
 import { z } from "zod";
 
+import { writeAuditLog } from "~/lib/audit.server";
 import { saveAppointment } from "~/lib/appointments.server";
+import {
+  decideConfirmation,
+  type PatientResponse,
+} from "~/lib/appointment-confirmation";
+import { CONFIRMATION_EXTENSION_URL } from "~/lib/reminders";
 import {
   getClinicalCompositions,
   getCompositionByVersionId,
@@ -84,6 +90,32 @@ const appointmentResourceSchema = z.object({
   status: z.string().min(1),
 });
 
+export class AppointmentNotFoundError extends Error {
+  constructor() {
+    super("Appointment not found.");
+    this.name = "AppointmentNotFoundError";
+  }
+}
+
+export class ConfirmationConflictError extends Error {
+  constructor(readonly reason: "already_cancelled" | "not_booked") {
+    super(`Appointment cannot take this response: ${reason}.`);
+    this.name = "ConfirmationConflictError";
+  }
+}
+
+export type AppointmentResponseResult = {
+  appointmentId: string;
+  /** `noop` means the same answer was already recorded; nothing was written. */
+  outcome: "applied" | "noop";
+  status: string;
+  confirmationStatus: string;
+};
+
+function confirmationExtension(value: string) {
+  return [{ url: CONFIRMATION_EXTENSION_URL, valueCode: value }];
+}
+
 export type FhirStore = {
   deleteAppointment: (appointmentId: string) => Promise<boolean>;
   deletePatient: (patientId: string) => Promise<boolean>;
@@ -115,6 +147,15 @@ export type FhirStore = {
    * on the server's local day.
    */
   searchAppointmentsBetween: (input: { from: Date; to: Date }) => Promise<AppointmentSearchResult>;
+  /**
+   * Records the patient's answer to a reminder. Declining cancels the appointment. Throws
+   * AppointmentNotFoundError or ConfirmationConflictError; repeating an answer is a no-op.
+   */
+  recordAppointmentResponse: (
+    appointmentId: string,
+    response: PatientResponse,
+    actorUserId: number,
+  ) => Promise<AppointmentResponseResult>;
   searchPatients: (input: { name: string | null }) => Promise<FhirResource[]>;
   searchRelatedResources: (input: {
     patient: string | null;
@@ -469,6 +510,7 @@ class PrismaFhirStore implements FhirStore {
       },
       select: {
         appointmentType: true,
+        confirmationStatus: true,
         end: true,
         id: true,
         patient: {
@@ -503,10 +545,86 @@ class PrismaFhirStore implements FhirStore {
         start: appointment.start.toISOString(),
         end: appointment.end.toISOString(),
         appointmentType: { text: appointment.appointmentType },
+        extension: confirmationExtension(appointment.confirmationStatus),
         participant: [{ actor: { reference: `Patient/${appointment.patientId}` }, status: "accepted" }],
       })) as FhirResource[],
       included: [...patients.values()],
     };
+  }
+
+  async recordAppointmentResponse(appointmentId: string, response: PatientResponse, actorUserId: number) {
+    const id = normalizeNumericId(appointmentId);
+    if (!id) {
+      throw new AppointmentNotFoundError();
+    }
+
+    // Optimistic concurrency: the write only lands if the row is still in the state the
+    // decision was made on. Two answers racing (e.g. "confirmo" and "não vou" sent seconds
+    // apart) can therefore never both win from the same starting point; the loser re-reads.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await prisma.appointment.findUnique({
+        where: { id },
+        select: { confirmationStatus: true, id: true, status: true },
+      });
+      if (!current) {
+        throw new AppointmentNotFoundError();
+      }
+
+      const decision = decideConfirmation(current, response);
+      if (decision.kind === "conflict") {
+        throw new ConfirmationConflictError(decision.reason);
+      }
+      if (decision.kind === "noop") {
+        return {
+          appointmentId: String(id),
+          outcome: "noop" as const,
+          status: current.status,
+          confirmationStatus: current.confirmationStatus,
+        };
+      }
+
+      const nextStatus = decision.appointmentStatus ?? current.status;
+      const written = await prisma.$transaction(async (tx) => {
+        const result = await tx.appointment.updateMany({
+          where: { id, status: current.status, confirmationStatus: current.confirmationStatus },
+          data: {
+            confirmationAt: new Date(),
+            confirmationStatus: decision.confirmationStatus,
+            status: nextStatus,
+          },
+        });
+        if (result.count !== 1) {
+          return false;
+        }
+
+        // Metadata only: no name, phone or free text of the patient.
+        await writeAuditLog(tx, {
+          action: "appointment.reminder.response",
+          category: "appointment",
+          entityId: String(id),
+          entityType: "Appointment",
+          metadata: {
+            fromConfirmation: current.confirmationStatus,
+            fromStatus: current.status,
+            response: decision.confirmationStatus,
+            status: nextStatus,
+          },
+          userId: actorUserId,
+        });
+        return true;
+      });
+
+      if (written) {
+        return {
+          appointmentId: String(id),
+          outcome: "applied" as const,
+          status: nextStatus,
+          confirmationStatus: decision.confirmationStatus,
+        };
+      }
+    }
+
+    throw new Error("Could not record the response: the appointment kept changing.");
   }
 
   async getAppointment(appointmentId: string) {
@@ -742,6 +860,37 @@ class MemoryFhirStore implements FhirStore {
   async getAppointment(appointmentId: string) {
     const appointment = this.appointments.get(appointmentId);
     return appointment ? cloneResource(appointment) : null;
+  }
+
+  async recordAppointmentResponse(appointmentId: string, response: PatientResponse, _actorUserId: number) {
+    const appointment = this.appointments.get(appointmentId);
+    if (!appointment) {
+      throw new AppointmentNotFoundError();
+    }
+
+    const extensions = Array.isArray(appointment.extension) ? (appointment.extension as Array<Record<string, unknown>>) : [];
+    const current = String(extensions.find((entry) => entry.url === CONFIRMATION_EXTENSION_URL)?.valueCode ?? "pending");
+    const status = String(appointment.status);
+
+    const decision = decideConfirmation({ confirmationStatus: current, status }, response);
+    if (decision.kind === "conflict") {
+      throw new ConfirmationConflictError(decision.reason);
+    }
+    if (decision.kind === "noop") {
+      return { appointmentId, outcome: "noop" as const, status, confirmationStatus: current };
+    }
+
+    const nextStatus = decision.appointmentStatus ?? status;
+    this.appointments.set(appointmentId, {
+      ...appointment,
+      status: nextStatus,
+      extension: [
+        ...extensions.filter((entry) => entry.url !== CONFIRMATION_EXTENSION_URL),
+        ...confirmationExtension(decision.confirmationStatus),
+      ],
+    });
+
+    return { appointmentId, outcome: "applied" as const, status: nextStatus, confirmationStatus: decision.confirmationStatus };
   }
 
   async saveAppointment(resource: unknown, _actorUserId: number, appointmentId?: string) {

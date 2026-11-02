@@ -75,6 +75,7 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
                         end: "2026-11-10T12:00:00.000Z",
                         status: "booked",
                         type: "routine",
+                        confirmation: "pending",
                         patient: { id: "7", firstName: "Maria", phone: "5571999998888" },
                       },
                     ],
@@ -85,6 +86,56 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
             },
             "400": { description: "date is missing or is not a real YYYY-MM-DD day" },
             "401": { description: "A valid Bearer token is required" },
+          },
+        },
+      },
+      "/api/reminders/appointments/{appointmentId}/response": {
+        post: {
+          summary: "Record the patient's answer to a reminder",
+          description:
+            "Body: {\"response\": \"confirmed\" | \"declined\" | \"no_response\"}. `declined` " +
+            "(\"não vou\") cancels the appointment so the reception sees the slot free. " +
+            "`no_response` records silence and never cancels or overrides a real answer. " +
+            "Repeating an answer is safe (outcome `noop`). A patient who already declined " +
+            "cannot re-confirm (409): the slot may be gone and a person decides. The reply " +
+            "carries no patient data. Reachable with a `reminders`-scoped token.",
+          parameters: [
+            { in: "path", name: "appointmentId", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["response"],
+                  properties: {
+                    response: { type: "string", enum: ["confirmed", "declined", "no_response"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Recorded, or already recorded",
+              content: {
+                "application/json": {
+                  example: {
+                    appointmentId: "12",
+                    outcome: "applied",
+                    status: "cancelled",
+                    confirmationStatus: "declined",
+                  },
+                },
+              },
+            },
+            "400": { description: "Body is not valid JSON or `response` is not allowed" },
+            "401": { description: "A valid Bearer token is required" },
+            "404": { description: "Appointment not found" },
+            "405": { description: "Only POST is served" },
+            "409": { description: "already_cancelled or not_booked" },
+            "413": { description: "Body larger than 4 KiB" },
           },
         },
       },

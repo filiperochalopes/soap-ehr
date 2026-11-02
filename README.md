@@ -50,7 +50,9 @@ flowchart LR
 | **Agenda** | Baseada em `Appointment`, com atendimento direto para o registro clínico. |
 | **Registro clínico** | Notas SOAP e narrativas, rascunho local criptografado e histórico de registros anteriores. |
 | **API FHIR** | `Patient`, `Appointment`, `Composition`, `Encounter`, `Observation`, `Condition`, `ClinicalImpression`, `POST /fhir` (Bundle). |
-| **Feed de lembretes** | `GET /api/reminders/appointments?date=AAAA-MM-DD`: somente leitura e minimizado. Devolve, por consulta `booked` do dia (no fuso configurado do EHR), o id, o horário, o **primeiro nome** e **um celular normalizado** (`55` + DDD + número). CPF, nascimento, e-mail e sobrenome nunca saem. Pacientes sem celular válido e consultas que não estão `booked` são apenas contados. Cada leitura é auditada só com contagens. |
+| **Feed de lembretes** | `GET /api/reminders/appointments?date=AAAA-MM-DD`: somente leitura e minimizado. Devolve, por consulta `booked` do dia (no fuso configurado do EHR), o id, o horário, o **primeiro nome** e **um celular normalizado** (`55` + DDD + número). CPF, nascimento, e-mail e sobrenome nunca saem. Pacientes sem celular válido e consultas que não estão `booked` são apenas contados. Cada leitura é auditada só com contagens. Aceita token com escopo `reminders`. |
+| **Resposta ao lembrete** | `POST /api/reminders/appointments/:id/response` com `{"response":"confirmed"\|"declined"\|"no_response"}`. `declined` ("não vou") **cancela** a consulta e a recepção vê o horário livre; a agenda mostra a coluna *Reminder*. Repetir é seguro; quem recusou não reconfirma por mensagem (409). |
+| **Tokens com escopo** | `pnpm create:token --scope reminders` emite um token que só alcança os endpoints de lembrete e **não lê prontuário nem a API FHIR**. O padrão continua `full`. Exige a migração `20261102000000_appointment_confirmation_and_token_scope` (colunas aditivas com valor padrão, sem alterar linhas existentes). |
 | **Docs da API** | Swagger UI em `/docs` e OpenAPI em `/openapi.json`. |
 | **Interface** | Português do Brasil (pt-BR) por padrão, via i18next. |
 

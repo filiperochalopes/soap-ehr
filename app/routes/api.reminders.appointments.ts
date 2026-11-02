@@ -1,5 +1,5 @@
 import { writeAuditLog } from "~/lib/audit.server";
-import { requireApiUser } from "~/lib/auth.server";
+import { requireApiScope } from "~/lib/auth.server";
 import { env } from "~/lib/env.server";
 import { prisma } from "~/lib/prisma.server";
 import { handleReminderFeedRequest, type ReminderRequestDeps } from "~/lib/reminders.server";
@@ -16,7 +16,7 @@ import { DEFAULT_UI_TIME_ZONE } from "~/lib/utils";
  * `handleReminderFeedRequest`; this file only wires the real auth, settings and audit log.
  */
 const deps: ReminderRequestDeps = {
-  authenticate: requireApiUser,
+  authenticate: (request) => requireApiScope(request, "reminders"),
   // The dry-run store has no database behind it, so there is no settings table or audit log.
   timeZone: async () => (env.API_DRY_RUN ? DEFAULT_UI_TIME_ZONE : getUiTimeZone()),
   audit: async ({ count, date, skipped, userId }) => {

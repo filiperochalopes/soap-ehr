@@ -26,6 +26,14 @@ const appointmentStatuses = [
 
 const appointmentStatusSet = new Set<string>(appointmentStatuses);
 
+/** What the patient answered to the reminder message, as the reception reads it. */
+const REMINDER_LABELS: Record<string, string> = {
+  confirmed: "Confirmed",
+  declined: "Declined (cancelled)",
+  no_response: "No response",
+  pending: "Not answered",
+};
+
 function parseAppointmentId(value: FormDataEntryValue | null) {
   if (typeof value !== "string" || !value.trim()) {
     return null;
@@ -179,6 +187,7 @@ export default function AgendaRoute() {
                 <th className="px-5 py-4">End</th>
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Type</th>
+                <th className="px-5 py-4">Reminder</th>
                 <th aria-label="Actions" className="px-5 py-4" />
               </tr>
             </thead>
@@ -222,6 +231,9 @@ export default function AgendaRoute() {
                       </Form>
                     </td>
                     <td className="px-5 py-4">{appointment.appointmentType}</td>
+                    <td className="px-5 py-4">
+                      {REMINDER_LABELS[appointment.confirmationStatus] ?? appointment.confirmationStatus}
+                    </td>
                     <td className="px-5 py-4 text-right">
                       <Link
                         className="button-primary whitespace-nowrap"

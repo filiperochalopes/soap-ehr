@@ -9,6 +9,28 @@
  */
 import { getDayRangeForTimeZone } from "~/lib/utils";
 
+/** FHIR extension that carries the patient's answer to the reminder on an Appointment. */
+export const CONFIRMATION_EXTENSION_URL =
+  "https://soap-ehr.example/StructureDefinition/appointment-confirmation";
+
+const CONFIRMATION_VALUES = ["pending", "confirmed", "declined", "no_response"] as const;
+export type ReminderConfirmation = (typeof CONFIRMATION_VALUES)[number];
+
+/** Unknown or missing values read as `pending`, never as an answer the patient did not give. */
+function confirmationOf(appointment: Record<string, unknown>): ReminderConfirmation {
+  const extensions = Array.isArray(appointment.extension) ? appointment.extension : [];
+  for (const entry of extensions) {
+    if (entry && typeof entry === "object" && (entry as Record<string, unknown>).url === CONFIRMATION_EXTENSION_URL) {
+      const value = (entry as Record<string, unknown>).valueCode;
+      return (CONFIRMATION_VALUES as readonly unknown[]).includes(value)
+        ? (value as ReminderConfirmation)
+        : "pending";
+    }
+  }
+
+  return "pending";
+}
+
 export class ReminderInputError extends Error {
   constructor(message: string) {
     super(message);
@@ -25,6 +47,7 @@ export type ReminderAppointment = {
   end: string;
   status: "booked";
   type: string | null;
+  confirmation: ReminderConfirmation;
   patient: { id: string; firstName: string; phone: string };
 };
 
@@ -219,6 +242,7 @@ export function buildReminderFeed(input: {
       end: end.toISOString(),
       status: ELIGIBLE_STATUS,
       type: typeof type === "string" ? type : null,
+      confirmation: confirmationOf(appointment),
       patient: { id: patientId, firstName: firstNameOf(patient), phone },
       startMs: start.getTime(),
     });

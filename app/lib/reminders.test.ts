@@ -95,6 +95,7 @@ test("exposes only what a reminder needs and nothing else about the patient", ()
       end: "2030-01-08T12:00:00.000Z",
       status: "booked",
       type: "routine",
+      confirmation: "pending",
       patient: { id: "7", firstName: "Maria", phone: "5571999991234" },
     },
   ]);
@@ -102,6 +103,28 @@ test("exposes only what a reminder needs and nothing else about the patient", ()
   for (const secret of [CPF, "1984", "maria@example.test", "Souza", "Lima", "Joao", "spouse", "urn:cpf", "female"]) {
     assert.ok(!serialized.includes(secret), `leaked ${secret}`);
   }
+});
+
+test("reads the confirmation state from the appointment and defaults to pending", () => {
+  const confirmed = appointment("1", "7", {
+    extension: [{ url: "https://soap-ehr.example/StructureDefinition/appointment-confirmation", valueCode: "confirmed" }],
+  });
+  const odd = appointment("2", "7", {
+    extension: [{ url: "https://soap-ehr.example/StructureDefinition/appointment-confirmation", valueCode: "banana" }],
+  });
+
+  const feed = buildReminderFeed({
+    date: "2030-01-08",
+    timeZone: TZ,
+    appointments: [confirmed, odd, appointment("3", "7")],
+    patients: [patient("7")],
+  });
+
+  assert.deepEqual(feed.appointments.map((a) => [a.id, a.confirmation]), [
+    ["1", "confirmed"],
+    ["2", "pending"],
+    ["3", "pending"],
+  ]);
 });
 
 test("only booked appointments are eligible and the rest are counted, not listed", () => {
