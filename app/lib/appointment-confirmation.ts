@@ -28,6 +28,18 @@ export function parsePatientResponse(value: unknown): PatientResponse {
   throw new ConfirmationInputError(`response must be one of: ${PATIENT_RESPONSES.join(", ")}.`);
 }
 
+/**
+ * Statuses of an appointment that is still scheduled. In this clinic the reception marks a
+ * scheduled appointment as "pending" (161 pending, 82 fulfilled, 45 cancelled, 3 noshow in
+ * production and never "booked"); the assistant writes "booked". Both are active.
+ */
+export const ACTIVE_APPOINTMENT_STATUSES = ["booked", "pending"] as const;
+export type ActiveAppointmentStatus = (typeof ACTIVE_APPOINTMENT_STATUSES)[number];
+
+export function isActiveAppointmentStatus(status: string): status is ActiveAppointmentStatus {
+  return (ACTIVE_APPOINTMENT_STATUSES as readonly string[]).includes(status);
+}
+
 export type ConfirmationDecision =
   | { kind: "noop" }
   | {
@@ -51,7 +63,7 @@ export function decideConfirmation(
     return { kind: "noop" };
   }
 
-  if (current.status !== "booked") {
+  if (!isActiveAppointmentStatus(current.status)) {
     // A late "silence" mark on something already closed is harmless; a real answer is not.
     return response === "no_response" ? { kind: "noop" } : { kind: "conflict", reason: "not_booked" };
   }

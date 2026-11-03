@@ -53,8 +53,21 @@ test("a patient who declined cannot silently re-confirm: the slot may be gone, a
   });
 });
 
-test("only booked appointments take a response", () => {
-  for (const status of ["pending", "proposed", "fulfilled", "arrived", "noshow", "entered-in-error", "cancelled"]) {
+test("a pending appointment is a scheduled one for this clinic and takes every response", () => {
+  // The clinic's history has 161 pending, 82 fulfilled, 45 cancelled, 3 noshow and no "booked":
+  // for the reception "pending" is simply "scheduled, not attended yet".
+  const pending = (confirmationStatus: string) => ({ status: "pending", confirmationStatus });
+  assert.deepEqual(decideConfirmation(pending("pending"), "confirmed"), { kind: "apply", confirmationStatus: "confirmed" });
+  assert.deepEqual(decideConfirmation(pending("pending"), "declined"), {
+    kind: "apply",
+    confirmationStatus: "declined",
+    appointmentStatus: "cancelled",
+  });
+  assert.deepEqual(decideConfirmation(pending("pending"), "no_response"), { kind: "apply", confirmationStatus: "no_response" });
+});
+
+test("only active (booked or pending) appointments take a response", () => {
+  for (const status of ["proposed", "fulfilled", "arrived", "noshow", "entered-in-error", "cancelled"]) {
     for (const response of ["confirmed", "declined"] as const) {
       const decision = decideConfirmation({ status, confirmationStatus: "pending" }, response);
       assert.deepEqual(decision, { kind: "conflict", reason: "not_booked" }, `${status}/${response}`);

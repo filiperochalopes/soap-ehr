@@ -9,7 +9,7 @@ import { DEFAULT_UI_TIME_ZONE } from "~/lib/utils";
 /**
  * GET /api/reminders/appointments?date=YYYY-MM-DD
  *
- * Read-only feed for appointment reminders: id and time of each booked appointment of that
+ * Read-only feed for appointment reminders: id and time of each scheduled (booked or pending) appointment of that
  * clinic-local day, plus the patient's first name and one normalised mobile number. Nothing
  * else about the patient is exposed (no CPF, birth date, e-mail or surname). Every read is
  * audited with counts only, since it hands out contact data. The rules live in

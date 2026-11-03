@@ -7,6 +7,7 @@
  * mobile number. CPF, birth date, e-mail, surname, contacts and every other field never
  * leave this module, so a client holding the feed cannot read them by accident.
  */
+import { isActiveAppointmentStatus, type ActiveAppointmentStatus } from "~/lib/appointment-confirmation";
 import { getDayRangeForTimeZone } from "~/lib/utils";
 
 /** FHIR extension that carries the patient's answer to the reminder on an Appointment. */
@@ -45,7 +46,7 @@ export type ReminderAppointment = {
   start: string;
   startLocal: string;
   end: string;
-  status: "booked";
+  status: ActiveAppointmentStatus;
   type: string | null;
   confirmation: ReminderConfirmation;
   patient: { id: string; firstName: string; phone: string };
@@ -59,8 +60,8 @@ export type ReminderFeed = {
   skipped: { notBooked: number; noPhone: number };
 };
 
-/** Only a firm appointment gets a reminder; pending/proposed ones are not confirmed bookings. */
-const ELIGIBLE_STATUS = "booked";
+// Only a scheduled appointment gets a reminder: "booked" (written by the assistant) or "pending"
+// (how the reception marks one). Proposed, cancelled, noshow, fulfilled etc. do not.
 
 // Area codes in use in Brazil (ANATEL). Used to tell a real DDD from a stray prefix.
 const BRAZILIAN_AREA_CODES = new Set([
@@ -218,7 +219,8 @@ export function buildReminderFeed(input: {
   const eligible: Array<ReminderAppointment & { startMs: number }> = [];
 
   for (const appointment of input.appointments) {
-    if (appointment.status !== ELIGIBLE_STATUS) {
+    const status = String(appointment.status ?? "");
+    if (!isActiveAppointmentStatus(status)) {
       skipped.notBooked += 1;
       continue;
     }
@@ -240,7 +242,7 @@ export function buildReminderFeed(input: {
       start: start.toISOString(),
       startLocal: toLocalIso(start, input.timeZone),
       end: end.toISOString(),
-      status: ELIGIBLE_STATUS,
+      status,
       type: typeof type === "string" ? type : null,
       confirmation: confirmationOf(appointment),
       patient: { id: patientId, firstName: firstNameOf(patient), phone },

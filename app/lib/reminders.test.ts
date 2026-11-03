@@ -127,7 +127,7 @@ test("reads the confirmation state from the appointment and defaults to pending"
   ]);
 });
 
-test("only booked appointments are eligible and the rest are counted, not listed", () => {
+test("booked and pending appointments are eligible and the rest are counted, not listed", () => {
   const feed = buildReminderFeed({
     date: "2030-01-08",
     timeZone: TZ,
@@ -137,12 +137,16 @@ test("only booked appointments are eligible and the rest are counted, not listed
       appointment("3", "7", { status: "noshow" }),
       appointment("4", "7", { status: "pending" }),
       appointment("5", "7", { status: "entered-in-error" }),
+      appointment("6", "7", { status: "proposed" }),
+      appointment("7", "7", { status: "fulfilled" }),
     ],
     patients: [patient("7")],
   });
 
-  assert.deepEqual(feed.appointments.map((a) => a.id), ["1"]);
-  assert.deepEqual(feed.skipped, { notBooked: 4, noPhone: 0 });
+  // "pending" is how the reception marks a scheduled appointment, so it is reminded too.
+  assert.deepEqual(feed.appointments.map((a) => a.id), ["1", "4"]);
+  assert.deepEqual(feed.appointments.map((a) => a.status), ["booked", "pending"], "the real status is reported");
+  assert.deepEqual(feed.skipped, { notBooked: 5, noPhone: 0 });
 });
 
 test("patients without a usable mobile number are counted, never listed", () => {

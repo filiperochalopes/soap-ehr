@@ -44,7 +44,7 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
         get: {
           summary: "Appointment reminder feed (read-only, minimised)",
           description:
-            "Booked appointments of one clinic-local day with only what a reminder needs: " +
+            "Scheduled (booked or pending) appointments of one clinic-local day with only what a reminder needs: " +
             "the appointment id and time, the patient's first name and one normalised mobile " +
             "number (country code + area code + number, digits only). CPF, birth date, e-mail, " +
             "surname and every other patient field are never returned. Patients without a " +

@@ -116,7 +116,19 @@ test("a patient who declined cannot re-confirm: that is a conflict for a human",
   }
 });
 
-test("only booked appointments take a response, and unknown ones are not found", async () => {
+test("a pending appointment can be declined and is then cancelled", async () => {
+  const row = await seed("pending");
+  try {
+    const result = await getFhirStore().recordAppointmentResponse(row.id, "declined", 1);
+
+    assert.deepEqual(result, { appointmentId: row.id, outcome: "applied", status: "cancelled", confirmationStatus: "declined" });
+    assert.equal((await getFhirStore().getAppointment(row.id))?.status, "cancelled");
+  } finally {
+    await row.clean();
+  }
+});
+
+test("only active appointments take a response, and unknown ones are not found", async () => {
   const row = await seed("fulfilled");
   try {
     await assert.rejects(
