@@ -156,7 +156,7 @@ export type FhirStore = {
     response: PatientResponse,
     actorUserId: number,
   ) => Promise<AppointmentResponseResult>;
-  searchPatients: (input: { name: string | null }) => Promise<FhirResource[]>;
+  searchPatients: (input: { name: string | null; limit?: number; offset?: number }) => Promise<FhirResource[]>;
   searchRelatedResources: (input: {
     patient: string | null;
     resourceType: RelatedResourceType;
@@ -371,7 +371,15 @@ class PrismaFhirStore implements FhirStore {
     throw new Error("FHIR deletion is available only in API_DRY_RUN mode.");
   }
 
-  async searchPatients({ name }: { name: string | null }) {
+  async searchPatients({
+    name,
+    limit = 100,
+    offset = 0,
+  }: {
+    name: string | null;
+    limit?: number;
+    offset?: number;
+  }) {
     const patients = await prisma.patient.findMany({
       where: name
         ? {
@@ -394,10 +402,10 @@ class PrismaFhirStore implements FhirStore {
         },
         telecom: true,
       },
-      take: 100,
-      orderBy: {
-        name: "asc",
-      },
+      take: limit,
+      skip: offset,
+      // `id` breaks ties between namesakes so a page boundary never repeats or skips anyone.
+      orderBy: [{ name: "asc" }, { id: "asc" }],
     });
 
     return patients.map(toFhirPatient) as FhirResource[];
@@ -759,15 +767,27 @@ class MemoryFhirStore implements FhirStore {
     return this.patients.delete(patientId);
   }
 
-  async searchPatients({ name }: { name: string | null }) {
+  async searchPatients({
+    name,
+    limit = 100,
+    offset = 0,
+  }: {
+    name: string | null;
+    limit?: number;
+    offset?: number;
+  }) {
     const normalizedName = name?.toLowerCase();
     return [...this.patients.values()]
       .filter((patient) => patient.active !== false)
       .filter((patient) =>
         normalizedName ? patientName(patient).toLowerCase().includes(normalizedName) : true,
       )
-      .sort((left, right) => patientName(left).localeCompare(patientName(right)))
-      .slice(0, 100)
+      .sort(
+        (left, right) =>
+          patientName(left).localeCompare(patientName(right)) ||
+          String(left.id).localeCompare(String(right.id), undefined, { numeric: true }),
+      )
+      .slice(offset, offset + limit)
       .map(cloneResource);
   }
 

@@ -4,6 +4,7 @@ import { requireApiUser } from "~/lib/auth.server";
 import { operationOutcome, toSearchBundle } from "~/lib/fhir/bundle";
 import { fhirJson } from "~/lib/fhir/capability";
 import { FHIR_APP_ERROR_CODES } from "~/lib/fhir/errors";
+import { parsePatientPaging, PatientPagingError } from "~/lib/fhir/patient-paging";
 import { getFhirStore } from "~/lib/fhir/store.server";
 import { Prisma as PrismaRuntime } from "~/lib/prisma.server";
 import { PATIENT_DUPLICATE_IDENTITY_MESSAGE } from "~/lib/patients.server";
@@ -13,7 +14,16 @@ export async function loader({ request }: { request: Request }) {
 
   const url = new URL(request.url);
   const name = url.searchParams.get("name")?.trim();
-  const patients = await getFhirStore().searchPatients({ name: name || null });
+  let paging;
+  try {
+    paging = parsePatientPaging(url.searchParams);
+  } catch (error) {
+    if (error instanceof PatientPagingError) {
+      return fhirJson(operationOutcome("error", "invalid", error.message), 400);
+    }
+    throw error;
+  }
+  const patients = await getFhirStore().searchPatients({ name: name || null, ...paging });
 
   return fhirJson(
     toSearchBundle(

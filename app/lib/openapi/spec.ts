@@ -157,12 +157,27 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
       },
       "/fhir/Patient": {
         get: {
-          summary: "Search patients",
+          summary: "Search patients (alphabetical, at most 100 per page; page with _count and _offset)",
           parameters: [
             {
               in: "query",
               name: "name",
               schema: { type: "string" },
+              required: false,
+            },
+            {
+              in: "query",
+              name: "_count",
+              description: "Page size, 1 to 100 (default 100).",
+              schema: { type: "integer", minimum: 1, maximum: 100 },
+              required: false,
+            },
+            {
+              in: "query",
+              name: "_offset",
+              description:
+                "How many patients to skip; continue from here until a page comes back with fewer than _count.",
+              schema: { type: "integer", minimum: 0 },
               required: false,
             },
           ],
