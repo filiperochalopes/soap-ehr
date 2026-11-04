@@ -36,7 +36,10 @@ import { importFhirBundle } from "~/lib/import.server";
 import {
   PATIENT_DUPLICATE_IDENTITY_MESSAGE,
   savePatient,
+  searchActivePatientIds,
+  sortByIdOrder,
 } from "~/lib/patients.server";
+import { rankByName } from "~/lib/patient-name-match";
 import { prisma } from "~/lib/prisma.server";
 import type { BundlePayload } from "~/lib/validation/import";
 import type { AppointmentInput } from "~/lib/validation/appointments";
@@ -380,28 +383,32 @@ class PrismaFhirStore implements FhirStore {
     limit?: number;
     offset?: number;
   }) {
-    const patients = await prisma.patient.findMany({
-      where: name
-        ? {
-            active: true,
-            name: { contains: name },
-          }
-        : { active: true },
-      include: {
-        contacts: true,
-        identifier: true,
-        mergedInto: {
-          select: {
-            id: true,
-          },
+    const include = {
+      contacts: true,
+      identifier: true,
+      mergedInto: {
+        select: {
+          id: true,
         },
-        replaces: {
-          select: {
-            id: true,
-          },
-        },
-        telecom: true,
       },
+      replaces: {
+        select: {
+          id: true,
+        },
+      },
+      telecom: true,
+    } as const;
+
+    if (name) {
+      // Ranked by closeness (see patient-name-match.ts), then paged: load only the requested page.
+      const pageIds = (await searchActivePatientIds(name)).slice(offset, offset + limit);
+      const found = await prisma.patient.findMany({ where: { id: { in: pageIds } }, include });
+      return sortByIdOrder(pageIds, found).map(toFhirPatient) as FhirResource[];
+    }
+
+    const patients = await prisma.patient.findMany({
+      where: { active: true },
+      include,
       take: limit,
       skip: offset,
       // `id` breaks ties between namesakes so a page boundary never repeats or skips anyone.
@@ -776,12 +783,17 @@ class MemoryFhirStore implements FhirStore {
     limit?: number;
     offset?: number;
   }) {
-    const normalizedName = name?.toLowerCase();
-    return [...this.patients.values()]
+    const active = [...this.patients.values()]
       .filter((patient) => patient.active !== false)
-      .filter((patient) =>
-        normalizedName ? patientName(patient).toLowerCase().includes(normalizedName) : true,
-      )
+      .sort((left, right) => Number(left.id) - Number(right.id) || String(left.id).localeCompare(String(right.id)));
+
+    if (name) {
+      return rankByName(name, active, patientName, { maxEdits: env.PATIENT_SEARCH_MAX_EDITS })
+        .slice(offset, offset + limit)
+        .map((match) => cloneResource(match.item));
+    }
+
+    return active
       .sort(
         (left, right) =>
           patientName(left).localeCompare(patientName(right)) ||

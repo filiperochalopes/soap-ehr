@@ -10,28 +10,15 @@ import {
   mergePatientRecords,
   PATIENT_DUPLICATE_IDENTITY_MESSAGE,
   savePatient,
+  searchActivePatientIds,
+  sortByIdOrder,
 } from "~/lib/patients.server";
 import { prisma } from "~/lib/prisma.server";
 import { getUiTimeZone } from "~/lib/settings.server";
 import { parsePatientForm } from "~/lib/validation/patients";
 import { formatDate, formatPatientAge, toDateInputValue } from "~/lib/utils";
 
-function patientSearchFilter(query: string, patientId: number) {
-  return {
-    active: true,
-    id: { not: patientId },
-    OR: [
-      { name: { contains: query } },
-      {
-        identifier: {
-          some: {
-            value: { contains: query },
-          },
-        },
-      },
-    ],
-  };
-}
+const MERGE_CANDIDATE_LIMIT = 10;
 
 export async function loader({
   params,
@@ -77,19 +64,23 @@ export async function loader({
     throw new Response("Patient not found", { status: 404 });
   }
 
-  const mergeCandidates =
+  const mergeCandidateIds =
     patient.active && mergeQuery
-      ? await prisma.patient.findMany({
-          where: patientSearchFilter(mergeQuery, patient.id),
+      ? (
+          await searchActivePatientIds(mergeQuery, { excludeId: patient.id, matchIdentifier: true })
+        ).slice(0, MERGE_CANDIDATE_LIMIT)
+      : [];
+  const mergeCandidates = mergeCandidateIds.length
+    ? sortByIdOrder(
+        mergeCandidateIds,
+        await prisma.patient.findMany({
+          where: { id: { in: mergeCandidateIds } },
           include: {
             identifier: true,
           },
-          orderBy: {
-            name: "asc",
-          },
-          take: 10,
-        })
-      : [];
+        }),
+      )
+    : [];
 
   const formValues: PatientFormValues = {
     active: patient.active,

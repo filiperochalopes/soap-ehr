@@ -2,31 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Form, Link, useLoaderData, useSubmit } from "react-router";
 
 import { requireUserSession } from "~/lib/auth.server";
+import { searchActivePatientIds, sortByIdOrder } from "~/lib/patients.server";
 import { prisma } from "~/lib/prisma.server";
 import { getPatientPersonalDataPrivacy, getUiTimeZone } from "~/lib/settings.server";
 import { formatDate, formatPatientAge } from "~/lib/utils";
 
 const PAGE_SIZE = 25;
-
-function buildPatientsFilter(query: string) {
-  if (!query) {
-    return { active: true };
-  }
-
-  return {
-    active: true,
-    OR: [
-      { name: { contains: query } },
-      {
-        identifier: {
-          some: {
-            value: { contains: query },
-          },
-        },
-      },
-    ],
-  };
-}
 
 function buildPatientsPageHref(query: string, page: number) {
   const params = new URLSearchParams();
@@ -50,29 +31,32 @@ export async function loader({ request }: { request: Request }) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
   const requestedPage = parsePage(url.searchParams.get("page"));
-  const where = buildPatientsFilter(query);
   const [patientPersonalDataPrivacy, timeZone] = await Promise.all([
     getPatientPersonalDataPrivacy(request),
     getUiTimeZone(),
   ]);
 
-  const totalPatients = await prisma.patient.count({ where });
+  // With a search, the closest matches come first (see patient-name-match.ts) and the page is cut
+  // from that ranked list; without one, the registry is listed A-Z.
+  const rankedIds = query ? await searchActivePatientIds(query, { matchIdentifier: true }) : null;
+  const totalPatients = rankedIds ? rankedIds.length : await prisma.patient.count({ where: { active: true } });
   const totalPages = Math.max(1, Math.ceil(totalPatients / PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
   const offset = (currentPage - 1) * PAGE_SIZE;
 
-  const patients = await prisma.patient.findMany({
-    where,
-    include: {
-      identifier: true,
-      telecom: true,
-    },
-    orderBy: {
-      name: "asc",
-    },
-    skip: offset,
-    take: PAGE_SIZE,
-  });
+  const include = { identifier: true, telecom: true } as const;
+  const pageIds = rankedIds?.slice(offset, offset + PAGE_SIZE);
+  const patients = pageIds
+    ? sortByIdOrder(pageIds, await prisma.patient.findMany({ where: { id: { in: pageIds } }, include }))
+    : await prisma.patient.findMany({
+        where: { active: true },
+        include,
+        orderBy: {
+          name: "asc",
+        },
+        skip: offset,
+        take: PAGE_SIZE,
+      });
 
   return {
     currentPage,

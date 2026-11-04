@@ -209,6 +209,7 @@ See the [migration runbook](migration/README.md) before a real cutover.
 - `PORT`: Node application port
 - `COOKIE_NAME`: auth cookie name for web login
 - `API_DRY_RUN`: when `true`, FHIR API writes are stored in process memory instead of Prisma; restarting the app/container clears the dry-run data
+- `PATIENT_SEARCH_MAX_EDITS`: tolerance of the approximate patient-name search, 0 to 3, default `2`: wrong letters accepted in a word of 5+ letters (4-letter words accept at most 1, shorter ones none) and letters a stretch inside a word may leave over (`ilva` finds `Silva`; `ana` does not find `Mariana`)
 - `MEUEXAME_API_BASE_URL`: base URL that enables the MeuExame attachment plugin
 - `DOCS_APP_BASE_URL`: browser-accessible base URL that enables the Docs document-generation integration
 - `DOCS_WEBHOOK_BASE_URL`: optional server-to-server base URL sent to Docs as the issued-document webhook target; defaults to `DOCS_APP_BASE_URL`

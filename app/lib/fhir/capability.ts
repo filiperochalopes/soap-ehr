@@ -41,6 +41,14 @@ export function capabilityStatement(baseUrl: string) {
               { code: "patch" },
               { code: "delete" },
             ],
+            searchParam: [
+              {
+                name: "name",
+                type: "string",
+                documentation:
+                  "Approximate match: ignores case, accents, punctuation and the words da/de/do/das/dos/e; accepts a prefix or a stretch of a word (3+ letters, a stretch inside a word may leave at most 2 letters over by default), a name with fewer words than the record, and a few wrong letters per word (2 by default, PATIENT_SEARCH_MAX_EDITS, in words of 5+ letters; 1 in words of 4, none up to 3). Results are ordered by closeness, then name; _count and _offset page that ordering.",
+              },
+            ],
           },
           {
             type: "Appointment",

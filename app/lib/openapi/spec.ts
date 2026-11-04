@@ -157,11 +157,14 @@ export function buildOpenApiSpec(serverUrl = "http://localhost:3000") {
       },
       "/fhir/Patient": {
         get: {
-          summary: "Search patients (alphabetical, at most 100 per page; page with _count and _offset)",
+          summary:
+            "Search patients (alphabetical, or closest name first with name; at most 100 per page; page with _count and _offset)",
           parameters: [
             {
               in: "query",
               name: "name",
+              description:
+                "Approximate name: ignores case, accents, punctuation and da/de/do/das/dos/e; accepts a prefix or a stretch of a word (3+ letters, a stretch inside a word may leave at most 2 letters over by default), fewer words than the record, and a few wrong letters per word (2 by default, PATIENT_SEARCH_MAX_EDITS, in words of 5+ letters; 1 in words of 4, none up to 3). Closest first.",
               schema: { type: "string" },
               required: false,
             },

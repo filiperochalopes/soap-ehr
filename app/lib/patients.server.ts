@@ -1,6 +1,8 @@
 import type { Patient, Prisma, PrismaClient } from "@prisma/client";
 
 import { writeAuditLog } from "~/lib/audit.server";
+import { env } from "~/lib/env.server";
+import { rankByName } from "~/lib/patient-name-match";
 import { prisma } from "~/lib/prisma.server";
 import type { PatientInput } from "~/lib/validation/patients";
 
@@ -15,6 +17,47 @@ type ImportedPatientMatch = Prisma.PatientGetPayload<{
 
 export const PATIENT_DUPLICATE_IDENTITY_MESSAGE =
   "A patient with this name and birth date already exists.";
+
+function identifierDigits(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Ids of the active patients that match `query`, closest first (see patient-name-match.ts).
+ * It reads only id, name and, with `matchIdentifier`, the identifier values: the registry is small
+ * and the ranking rule lives in the app, not in SQL. An identifier matches when the letters and
+ * digits of the search are contained in those of the identifier ("123.456.789-00" finds
+ * "12345678900"); identifier-only matches come after the name matches.
+ */
+export async function searchActivePatientIds(
+  query: string,
+  options: { excludeId?: number; matchIdentifier?: boolean } = {},
+) {
+  const wantedIdentifier = options.matchIdentifier ? identifierDigits(query) : "";
+  const patients: Array<{ id: number; name: string; identifier?: Array<{ value: string }> }> =
+    await prisma.patient.findMany({
+      where: { active: true, ...(options.excludeId ? { id: { not: options.excludeId } } : {}) },
+      select: {
+        id: true,
+        identifier: wantedIdentifier ? { select: { value: true } } : false,
+        name: true,
+      },
+      orderBy: { id: "asc" },
+    });
+
+  return rankByName(query, patients, (patient) => patient.name, {
+    maxEdits: env.PATIENT_SEARCH_MAX_EDITS,
+    alsoInclude: (patient) =>
+      Boolean(wantedIdentifier) &&
+      Boolean(patient.identifier?.some((identifier) => identifierDigits(identifier.value).includes(wantedIdentifier))),
+  }).map((match) => match.item.id);
+}
+
+/** Puts rows loaded with `id: { in }` back in the order of `ids`. */
+export function sortByIdOrder<T extends { id: number }>(ids: number[], rows: T[]) {
+  const position = new Map(ids.map((id, index) => [id, index]));
+  return [...rows].sort((left, right) => (position.get(left.id) ?? 0) - (position.get(right.id) ?? 0));
+}
 
 function patientNestedWrite(input: PatientInput) {
   return {

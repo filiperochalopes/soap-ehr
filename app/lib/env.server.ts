@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DEFAULT_MAX_EDITS } from "~/lib/patient-name-match";
 import { decodePluginSecretEncryptionKey } from "~/lib/plugin-secret-key.server";
 
 const optionalUrl = z.preprocess(
@@ -37,6 +38,10 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
+  PATIENT_SEARCH_MAX_EDITS: z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    z.coerce.number().int().min(0).max(3).default(DEFAULT_MAX_EDITS),
+  ),
   PORT: z.coerce.number().default(3000),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_BUCKET: z.string().optional(),
