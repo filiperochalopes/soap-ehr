@@ -27,7 +27,7 @@ The implementation stays as a single full-stack monolith and follows `YAGNI`, `D
 - React + TypeScript
 - Node.js
 - Prisma ORM
-- PostgreSQL for the canonical EHR and OMOP analytics; MySQL only as the V1 migration source
+- PostgreSQL for the canonical EHR and OMOP analytics
 - Tailwind CSS
 - OpenAPI + Swagger UI
 - Docker Compose
@@ -42,7 +42,7 @@ Operational rules in this codebase:
 - operational data such as users, patients, appointments and drafts remains relational
 - clinical content is stored only as versioned compositions validated against a template
 - the API layer projects canonical compositions to FHIR resources
-- `prisma/migrations/` contains only the V2 schema; V1 artifacts live exclusively under `docs/migration/v1/`
+- `prisma/migrations/` contains the canonical PostgreSQL schema migrations
 
 ## Data Architecture
 
@@ -140,31 +140,23 @@ Use Docker Compose for the PostgreSQL V2 database and the Node monolith:
 docker compose -f compose.yml -f compose.dev.yml up --build
 ```
 
-The default stack is the application runtime only. The legacy MySQL source and
-the OMOP projection are optional and live behind Compose profiles:
+The default stack contains the application and PostgreSQL. To install the
+optional OMOP CDM schema:
 
 ```bash
-# add the OMOP CDM schema
 docker compose -f compose.yml -f compose.dev.yml --profile omop up -d
-
-# add the stale V1 MySQL source
-docker compose -f compose.yml -f compose.dev.yml --profile legacy up -d
 ```
 
-The database services are deliberately named by lifecycle:
-
-- `soap-ehr-db`: PostgreSQL 17 database `soap_ehr`, containing the canonical
-  runtime in `public`, OMOP CDM in `omop`, and ETL metadata in `soap_ehr_etl`;
-- `soap-ehr-db-legacy`: MySQL 8.4 database `fhir_soap_record`, retained only as
-  the V1 fixture/source and never read by the application runtime.
+`soap-ehr-db` is the PostgreSQL 17 database `soap_ehr`, containing the canonical
+runtime in `public`, OMOP CDM in `omop`, and ETL metadata in `soap_ehr_etl`.
 
 The `soap-ehr` service applies only the PostgreSQL V2 Prisma migrations. The
 `soap-ehr-omop-init` service, under the `omop` profile, installs the pinned
 39-table CDM 5.4.2 schema in the same database; see the
 [OMOP runbook](omop.md). The application never requires it to start.
 
-If ports `3000`, `5438` or `3306` are already in use, override them with
-`APP_PORT`, `DB_PORT` and `LEGACY_DB_PORT` respectively.
+If ports `3000` or `5438` are already in use, override them with
+`APP_PORT` or `DB_PORT` respectively.
 
 To test S3-compatible attachment storage locally, enable the RustFS override first:
 
@@ -173,39 +165,15 @@ cp compose.override.yml.bak compose.override.yml
 docker compose -f compose.yml -f compose.dev.yml up --build
 ```
 
-For the real single-instance cutover, run one command from the checked-out V2
-repository:
-
-```bash
-pnpm migrate:mysql-to-postgres
-```
-
-It stops the old app, reattaches its MySQL volume as `soap-ehr-db-legacy`, makes
-a safety dump, creates `soap-ehr-db` as PostgreSQL, migrates and verifies V2,
-builds OMOP, creates a PostgreSQL recovery dump, and starts the app against the
-new database. Backups are written under `backups/`; MySQL is not deleted.
-
-Exercise the same command against the local development Compose with:
-
-```bash
-SOAP_EHR_COMPOSE_FILE=compose.dev.yml pnpm migrate:mysql-to-postgres
-```
-
-See the [migration runbook](migration/README.md) before a real cutover.
-
 ## Environment Variables
 
 - `DATABASE_URL`: V2 runtime connection string used by Prisma Client
-- `V1_DATABASE_URL`: migration-tool connection string; the application runtime never reads it
 - `OMOP_DATABASE_URL`: ETL connection to the same PostgreSQL database; OMOP uses separate schemas
 - `APP_PORT`: host port published for the web app in Docker Compose
 - `APP_URL`: external base URL used in generated docs and examples
 - `DB_PORT`: host port published for PostgreSQL, default `5438`
-- `LEGACY_DB_PORT`: host port published for the legacy MySQL service, default `3306`
 - `SOAP_EHR_DB_NAME`: V2 database name, default `soap_ehr`
-- `V1_DB_NAME`: V1 fixture/source database name, default `fhir_soap_record`
 - `DB_USER`, `DB_PASS`: PostgreSQL V2 credentials
-- `LEGACY_DB_USER`, `LEGACY_DB_PASS`: MySQL V1 backup/migration credentials
 - `PORT`: Node application port
 - `COOKIE_NAME`: auth cookie name for web login
 - `API_DRY_RUN`: when `true`, FHIR API writes are stored in process memory instead of Prisma; restarting the app/container clears the dry-run data
@@ -234,7 +202,6 @@ Practical rule:
 - run `pnpm prisma:generate` after schema changes
 - create new schema changes with `pnpm prisma:migrate:dev --name <migration-name>`
 - apply committed migrations with `pnpm prisma:migrate:deploy`
-- never point `DATABASE_URL` at the V1 database; the two migration histories are intentionally isolated
 
 ## Create a User and Token
 

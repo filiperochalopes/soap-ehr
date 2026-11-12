@@ -1,56 +1,6 @@
 name: soap-ehr
 
 services:
-  soap-ehr-db-legacy:
-    profiles: ["legacy", "migration"]
-    image: mysql:8.4
-    container_name: soap-ehr-db-legacy
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "3"
-    networks:
-      - data
-    environment:
-      MYSQL_DATABASE: ${V1_DB_NAME:-fhir_soap_record}
-      MYSQL_ROOT_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      MYSQL_USER: ${LEGACY_DB_USER:-clinic}
-      MYSQL_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${LEGACY_DB_PASS:-${DB_PASS:-clinic}}"]
-      # Matches the production V1 database setting and avoids unnecessary probes
-      # while the retained legacy source is only used during migration.
-      interval: 60s
-      timeout: 5s
-      retries: 10
-    ports:
-      - "${LEGACY_DB_PORT:-3306}:3306"
-    # Preserve the existing MySQL files while the renamed service becomes
-    # read-only/stale after production cutover.
-    volumes:
-      - ./data/db:/var/lib/mysql
-
-  soap-ehr-db-legacy-init:
-    profiles: ["legacy", "migration"]
-    image: mysql:8.4
-    restart: "no"
-    networks:
-      - data
-    depends_on:
-      soap-ehr-db-legacy:
-        condition: service_healthy
-    environment:
-      DB_HOST: soap-ehr-db-legacy
-      DB_ROOT_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      DB_USER: ${LEGACY_DB_USER:-clinic}
-      MYSQL_PWD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      V1_DB_NAME: ${V1_DB_NAME:-fhir_soap_record}
-    entrypoint: ["/bin/sh", "/scripts/ensure-v1-legacy-database.sh"]
-    volumes:
-      - ./scripts/ensure-v1-legacy-database.sh:/scripts/ensure-v1-legacy-database.sh:ro
-
   soap-ehr-db:
     image: postgres:17-alpine
     container_name: soap-ehr-db
@@ -77,7 +27,7 @@ services:
       - ./data/postgres:/var/lib/postgresql/data
 
   soap-ehr-omop-init:
-    profiles: ["omop", "migration"]
+    profiles: ["omop"]
     image: postgres:17-alpine
     restart: "no"
     networks:
@@ -94,25 +44,6 @@ services:
     volumes:
       - ./scripts/ensure-omop-schema.sh:/scripts/ensure-omop-schema.sh:ro
       - ./omop/schema:/omop:ro
-
-  soap-ehr-migration:
-    profiles: ["migration"]
-    build:
-      context: .
-      target: migration
-    networks:
-      - data
-    depends_on:
-      soap-ehr-db-legacy-init:
-        condition: service_completed_successfully
-      soap-ehr-db:
-        condition: service_healthy
-      soap-ehr-omop-init:
-        condition: service_completed_successfully
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      OMOP_DATABASE_URL: ${OMOP_DATABASE_URL:?OMOP_DATABASE_URL must be set}
-      V1_DATABASE_URL: ${V1_DATABASE_URL:?V1_DATABASE_URL must be set}
 
   soap-ehr:
     build:
@@ -140,7 +71,6 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       OMOP_DATABASE_URL: ${OMOP_DATABASE_URL:?OMOP_DATABASE_URL must be set}
-      V1_DATABASE_URL: ${V1_DATABASE_URL:?V1_DATABASE_URL must be set}
       APP_URL: ${APP_URL:-http://localhost:3000}
       API_DRY_RUN: ${API_DRY_RUN:-false}
       COOKIE_NAME: clinic_token

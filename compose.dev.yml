@@ -1,41 +1,6 @@
 name: soap-ehr
 
 services:
-  soap-ehr-db-legacy:
-    image: mysql:8.4
-    environment:
-      MYSQL_DATABASE: ${V1_DB_NAME:-fhir_soap_record}
-      MYSQL_ROOT_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      MYSQL_USER: ${LEGACY_DB_USER:-clinic}
-      MYSQL_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${LEGACY_DB_PASS:-${DB_PASS:-clinic}}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    ports:
-      - "${LEGACY_DB_PORT:-3306}:3306"
-    volumes:
-      # Reattach the existing local V1/V2 MySQL volume under the renamed legacy
-      # service. Only fhir_soap_record is read by migration tooling.
-      - mysql_data:/var/lib/mysql
-
-  soap-ehr-db-legacy-init:
-    image: mysql:8.4
-    restart: "no"
-    depends_on:
-      soap-ehr-db-legacy:
-        condition: service_healthy
-    environment:
-      DB_HOST: soap-ehr-db-legacy
-      DB_ROOT_PASSWORD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      DB_USER: ${LEGACY_DB_USER:-clinic}
-      MYSQL_PWD: ${LEGACY_DB_PASS:-${DB_PASS:-clinic}}
-      V1_DB_NAME: ${V1_DB_NAME:-fhir_soap_record}
-    entrypoint: ["/bin/sh", "/scripts/ensure-v1-legacy-database.sh"]
-    volumes:
-      - ./scripts/ensure-v1-legacy-database.sh:/scripts/ensure-v1-legacy-database.sh:ro
-
   soap-ehr-db:
     image: postgres:17-alpine
     environment:
@@ -68,23 +33,6 @@ services:
       - ./scripts/ensure-omop-schema.sh:/scripts/ensure-omop-schema.sh:ro
       - ./omop/schema:/omop:ro
 
-  soap-ehr-migration:
-    profiles: ["migration"]
-    build:
-      context: .
-      target: migration
-    depends_on:
-      soap-ehr-db-legacy-init:
-        condition: service_completed_successfully
-      soap-ehr-db:
-        condition: service_healthy
-      soap-ehr-omop-init:
-        condition: service_completed_successfully
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      OMOP_DATABASE_URL: ${OMOP_DATABASE_URL:?OMOP_DATABASE_URL must be set}
-      V1_DATABASE_URL: ${V1_DATABASE_URL:?V1_DATABASE_URL must be set}
-
   soap-ehr:
     build:
       context: .
@@ -106,7 +54,6 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       OMOP_DATABASE_URL: ${OMOP_DATABASE_URL:?OMOP_DATABASE_URL must be set}
-      V1_DATABASE_URL: ${V1_DATABASE_URL:?V1_DATABASE_URL must be set}
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:
@@ -114,7 +61,6 @@ services:
       - /app/node_modules
 
 volumes:
-  mysql_data:
   postgres_data:
 
 networks:

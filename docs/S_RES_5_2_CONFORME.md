@@ -21,9 +21,7 @@
 
 ## Contexto do Sistema
 
-O **fhir-soap-record** é uma aplicação web (React Router + Node.js) com banco PostgreSQL (Prisma ORM) e armazenamento de arquivos em S3. O MySQL
-permanece apenas como fonte de migração V1, fora do caminho de execução da
-aplicação. Uma projeção analítica OMOP CDM 5.4.2, derivada e somente leitura,
+O **fhir-soap-record** é uma aplicação web (React Router + Node.js) com banco PostgreSQL (Prisma ORM) e armazenamento de arquivos em S3. Uma projeção analítica OMOP CDM 5.4.2, derivada e somente leitura,
 vive em schema separado do mesmo banco. A autenticação é feita via **token Bearer** (sem login usuário/senha na interface; tokens são gerados por scripts CLI). O sistema é de **instância única** (não SaaS multi-tenant). A gestão de usuários está restrita a scripts no servidor — não há interface administrativa na aplicação.
 
 ---
@@ -85,9 +83,9 @@ vive em schema separado do mesmo banco. A autenticação é feita via **token Be
 
 | ID | Título | Status | Evidência / Notas |
 |----|--------|:------:|-------------------|
-| NGS1.04.01 | Geração de cópia de segurança | ⚠️ PARCIAL | `scripts/backup-v2-postgres.sh` gera dump `pg_dump` com SHA-256 de verificação (`pnpm v2:backup`); `scripts/backup-v1-mysql.sh` faz o equivalente para a fonte V1. Não há agendamento nem rotina de backup automática no `docker-compose`. **Veredito a reavaliar.** |
+| NGS1.04.01 | Geração de cópia de segurança | ⚠️ PARCIAL | `scripts/backup-v2-postgres.sh` gera dump `pg_dump` com SHA-256 de verificação (`pnpm v2:backup`). Não há agendamento nem rotina de backup automática no `docker-compose`. **Veredito a reavaliar.** |
 | NGS1.04.03 | Sigilo da cópia de segurança | ❌ PENDENTE | Os dumps são gravados em texto plano sob `backups/`, sem encriptação. O SHA-256 garante integridade, não sigilo. |
-| NGS1.04.04 | Restauração de cópia de segurança | ❌ PENDENTE | `scripts/restore-v1-mysql.sh` restaura apenas a fonte V1 (MySQL), protegido por `CONFIRM_RESTORE_V1=1`. Não há restauração do PostgreSQL V2 canônico. |
+| NGS1.04.04 | Restauração de cópia de segurança | ❌ PENDENTE | Não há rotina de restauração do PostgreSQL canônico no projeto. |
 | NGS1.04.05 | Integridade na restauração | ❌ PENDENTE | Sem verificação de integridade na restauração. |
 | NGS1.04.06 | Alerta de limiar de ocupação | ❌ PENDENTE | Sem monitoramento de espaço em disco ou alertas de limiar na aplicação. |
 

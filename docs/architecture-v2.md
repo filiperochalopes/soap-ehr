@@ -67,12 +67,9 @@ SOAP prose as coded conditions or measurements. See [`omop.md`](omop.md).
 
 ## Database isolation
 
-V1 and V2 use different engines during migration:
+The application uses PostgreSQL:
 
 ```text
-soap-ehr-db-legacy (MySQL)
-└── fhir_soap_record  V1 source/fixture; stale and migration-only
-
 soap-ehr-db (PostgreSQL)
 └── soap_ehr
     ├── public        V2 canonical runtime
@@ -84,13 +81,14 @@ OMOP shares the PostgreSQL server and database but not the canonical tables. It
 is outside the clinical transaction path and remains safe to rebuild from
 `public`.
 
-The V1 migration history and deterministic synthetic fixture live under
-`docs/migration/v1/`. Active Prisma migrations contain only the clean V2 initial
-schema. This prevents `prisma migrate deploy` from dropping or modifying a V1
-database accidentally.
+The active Prisma migrations contain only the canonical schema in
+`prisma/migrations/`.
 
-The standalone converter is the only bridge between the schemas. It preserves
-operational IDs/timestamps, records original clinical provenance in
-`CompositionVersion.sourceMetadata`, and validates complete operational-row and
-canonical clinical-content hashes before reporting success. See
-[`migration/README.md`](migration/README.md).
+## Historical backup recovery
+
+A retained V1 MySQL dump cannot be restored directly into PostgreSQL. The V1
+schema, conversion tooling and migration runbook are available in Git at commit
+`c2bfa38`; recovery requires an isolated MySQL restore followed by semantic
+conversion. Database dumps do not include attachments in S3-compatible storage;
+those require a separate backup. The checked-in V1 dump is a synthetic fixture,
+not a production backup.

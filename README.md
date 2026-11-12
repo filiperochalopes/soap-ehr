@@ -86,7 +86,6 @@ React Router v7 · React 19 · TypeScript · Prisma · PostgreSQL 17 · Tailwind
 - [Guia de desenvolvimento e operação](docs/desenvolvimento.md): variáveis de ambiente, Docker, Prisma, importação FHIR
 - [Arquitetura V2](docs/architecture-v2.md)
 - [Projeção OMOP](docs/omop.md)
-- [Migração V1 → V2](docs/migration/README.md)
 - [Requisitos SBIS S-RES 5.2](docs/S_RES_5_2.md) e [matriz de conformidade](docs/S_RES_5_2_CONFORME.md)
 
 ## Autor

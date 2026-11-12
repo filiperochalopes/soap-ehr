@@ -1,4 +1,0 @@
-datasource db {
-  provider = "mysql"
-  url      = env("V1_DATABASE_URL")
-}

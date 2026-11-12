@@ -21,17 +21,6 @@ COPY . .
 RUN pnpm prisma generate
 RUN pnpm build
 
-# Disposable cutover image. It contains the V1 reader, V2 converter and OMOP
-# ETL with their development-only CLI dependencies, but is never used as the
-# application runtime image.
-FROM deps AS migration
-WORKDIR /app
-
-COPY . .
-RUN pnpm prisma generate
-
-CMD ["sh"]
-
 FROM node:22-alpine AS runner
 ARG PNPM_VERSION
 WORKDIR /app
