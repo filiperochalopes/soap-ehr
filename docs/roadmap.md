@@ -131,16 +131,32 @@ Camadas, em ordem:
 
 #### 4. Modelo NER: spike de seleção
 
-O modelo será escolhido por benchmark, não por suposição. Candidatos levantados no Hugging Face em 12/11/2026:
+O modelo será escolhido por benchmark, não por suposição. Levantamento de 12/11/2026, com medições locais de sondagem (uma nota sintética, Apple M4 Pro, não a VPS; não é avaliação de acurácia):
 
-| Modelo | Base / tamanho | Domínio de treino | Licença | Formato disponível | Observação |
-| --- | --- | --- | --- | --- | --- |
-| `noharm-ai/anony` | ModernBERT (Ettin-17m) | **notas clínicas pt-BR** com nomes anotados | MIT | Flair (`pytorch_model.bin`) | Domínio mais próximo e muito pequeno. Exige conversão ou um sidecar Python (Flair). |
-| `inples-tech/anonimato-ner-ptbr` | BERTimbau-base, ONNX int8, 109 MB | LeNER-Br + corpus jurídico sintético | Apache-2.0 | **ONNX** pronto | Roda em `onnxruntime-node` sem torch. Domínio jurídico, não clínico. |
-| `OpenMed/OpenMed-PII-Portuguese-SuperClinical-Small-44M-v1` | DeBERTa-v3-small, 44M | PII sintético (AI4Privacy), com viés pt-PT | Apache-2.0 | safetensors | 54 tipos de PII. Precisa converter para ONNX. |
-| `Venturus/BERTimbau-AnonyMED-BR` | BERT large, 0.3B | anonimização médica pt-BR (AnonyMED-BR) | **não declarada** | safetensors | Excluído enquanto não houver licença e por ser grande demais para CPU leve. |
+| Candidato | Base / tamanho | Domínio de treino | Licença | Sondagem local |
+| --- | --- | --- | --- | --- |
+| **Pacote ONNX do `noharm-anony` (o1.3)** | ModernBERT Ettin-17m (7 camadas, hidden 256), ONNX fp32 67 MB | **notas clínicas pt-BR**, rótulo único `NOME` (BIOES) | repositório MIT; o pacote baixado de `noharm.ai/anony` não traz licença própria (confirmar) | ~0,04 s em 430 caracteres, ~0,56 s em 4,3 mil; RSS ~290 MB. Redigiu filha, mãe e médico; manteve "sinal de Murphy". |
+| **BERTimbau-large NER (HAREM), ONNX int8** (`rchuluc/bertimbau-large-ner-total-onnx`) | BERT large, 104 MB int8 | geral (HAREM), 10 classes incluindo `PESSOA` | MIT | ~0,035 s em 430 caracteres, ~0,25 s em 4,3 mil; RSS ~310 MB. Marcou as mesmas pessoas, sem marcar "Murphy". |
+| `inples-tech/anonimato-ner-ptbr` | BERTimbau-base, ONNX int8, 109 MB | jurídico (LeNER-Br + sintético) | Apache-2.0 | não medido |
+| `OpenMed/OpenMed-PII-Portuguese-SuperClinical-Small-44M-v1` | DeBERTa-v3-small, 44M | PII sintético, viés pt-PT | Apache-2.0 | não medido; precisa de export ONNX |
+| `Venturus/BERTimbau-AnonyMED-BR` | BERTimbau-large, 0.3B | anonimização médica pt-BR | **não declarada** | não medido. O tamanho **não** é impeditivo (o large int8 acima roda bem); o bloqueio é a licença. |
 
-**Runtime:** de preferência *in-process* no Node via `onnxruntime-node` ou `@huggingface/transformers` (transformers.js), para manter o monolito. A alternativa é um sidecar Python no `compose.yml`, que só se justifica se o melhor modelo for Flair-only e a conversão para ONNX falhar.
+Correção da versão anterior deste documento: o BERTimbau-large **não** é grande demais para CPU. Quantizado em int8, ficou na mesma faixa de latência e memória do modelo de 17M. A VPS (8 a 16 núcleos x86) precisa ser medida no spike.
+
+**PUCPR (`pucpr/*`) no Hugging Face:** não há modelo de nomes/PII. Há o `biobertpt-clin` (base para fine-tuning clínico) e a série `clinicalnerpt-*` (disorder, chemical, laboratory, quantitative, procedure etc., do SemClinBr), sem licença declarada nos cards. Serve à **v0.4** (enriquecimento), não à anonimização.
+
+**A essência do `noharm-anony` a replicar** (lida no repositório `noharm-ai/noharm-anony`, commit `a5ad303`, e no `manifest.json` do pacote o1.3):
+
+- modelo de token classification pequeno exportado em ONNX, rodando com `onnxruntime` + `tokenizers`, sem torch nem Flair;
+- **contexto de documento**: cada frase é inferida com as palavras vizinhas como contexto (FLERT, `context_length` 64). O README mede que isso compra 31 pontos de recall sobre a predição por frase isolada;
+- texto que o modelo lê com **tag HTML valendo espaço**, nunca colada (a colagem deixava 84–89% dos nomes achados sem redação);
+- redação **por forma sobre o texto original**, em todas as ocorrências, tolerante a NBSP e caracteres invisíveis, com `\b` só em bordas alfanuméricas, e fallback por pedaços quando a forma inteira não casa;
+- **blocklist** versionada de formas que o modelo marca e não são nome (escalas, fármacos, parentesco, rótulos de formulário), comparada pela forma inteira em `casefold`;
+- versão do modelo registrada em cada execução.
+
+O que **não** precisamos copiar: orçamento de tempo e redação parcial (resolvem notas de 76 mil caracteres atrás do timeout do NiFi), RTF e o serviço FastAPI. Aqui a regra é falha fechada: se não couber, não sai.
+
+**Runtime:** de preferência *in-process* no Node via `onnxruntime-node`, portando o runtime do pacote (~460 linhas Python) para TypeScript com um teste de **paridade span a span** contra o runtime Python no corpus sintético. A alternativa é um sidecar Python mínimo no `compose.yml` com o runtime original, se a paridade não fechar (decisão D3.7).
 
 **Protocolo do spike** (throwaway, fora do repositório principal):
 
@@ -163,7 +179,7 @@ O modelo será escolhido por benchmark, não por suposição. Candidatos levanta
 
 - recall de PESSOA ≥ 0,98 no corpus sintético com o pipeline completo;
 - zero epônimos da lista de exceções removidos;
-- p95 abaixo de 200 ms por nota em CPU;
+- p95 abaixo de 500 ms por nota típica (até ~4 mil caracteres) **na VPS de produção**;
 - modelo empacotado na imagem Docker, sem download em runtime.
 
 #### 5. Testes de privacidade (regressão)
@@ -192,13 +208,42 @@ O modelo será escolhido por benchmark, não por suposição. Candidatos levanta
 
 #### 7. Novo layout
 
-- **A definir com protótipo antes de codar.** Entregável: um protótipo HTML navegável das telas principais (pacientes, agenda, registro SOAP, histórico, plugins) e uma lista de mudanças aprovada.
-- Restrições:
-  - reaproveitar componentes compartilhados (`app-shell.tsx`, `toast.tsx`);
-  - manter i18n pt-BR;
-  - **não regredir** autosave, rascunho criptografado e erros recuperáveis do AGENTS.md.
-- Testes de regressão do rascunho SOAP rodam antes e depois da troca de layout.
-- Ponto de contato com o MCP: a interface pode exibir o registro de auditoria das chamadas de agentes por paciente. É opcional (decisão D3.6).
+Direção visual: interface com aspecto de **terminal**, fundo verde-oliva escuro, linhas finas e acento verde-claro. Protótipos navegáveis (estáticos, dados fictícios), feitos a partir dos mockups do autor:
+
+- [`docs/design/v0.3-layout-prototype.html`](design/v0.3-layout-prototype.html): o prontuário;
+- [`docs/design/v0.3-login-prototype.html`](design/v0.3-login-prototype.html): o login;
+- [`docs/design/kit.js`](design/kit.js): tema Tailwind compartilhado (grade de 8 pontos, cores, fontes, ícones).
+
+**Sistema visual**
+
+- **Tailwind CSS** (o projeto já usa a v3) com **grade de 8 pontos**: a escala de spacing é substituída, então `p-1` = 8px, `h-7` = 56px. Só há meios-passos de 4px (`0.5`, `1.5`, `2.5`) para ícones e ajuste fino. As alturas de linha são múltiplas de 8.
+- **Tipografia:** Helvetica Neue em títulos (Medium/Semibold) e em textos e campos (Regular). Metadados, rótulos de seção (`01 / S`, `PACIENTE / 0042`, `HISTÓRICO DO PACIENTE`) e rodapé em monoespaçada do sistema.
+
+**Uma única tela.** Todo o prontuário acontece numa página só, que não muda de rota durante o atendimento:
+
+| Região | Conteúdo |
+| --- | --- |
+| Header | `soap / ehr`, Pacientes, Agenda, idioma, usuário |
+| Barra do paciente | `PACIENTE / 0042`, nome (abre os detalhes), idade e sexo, data do atendimento |
+| Formulário (esquerda) | abas SOAP / Narrativa, estado do rascunho, seções numeradas `01 / S` a `04 / P` em texto corrido; barra inferior com Anexar, Pré-visualizar e **Salvar atendimento ↵** |
+| Plugins (direita) | título `PLUGINS` com engrenagem, abas de plugin (Histórico, Scores), seções recolhíveis (Calculadoras clínicas, Anexos) |
+| Rodapé | `soap-ehr` e versão, "Prontuário pessoal", estado da conexão |
+
+**Janelas flutuantes.** Buscar paciente, Detalhes do paciente (editável, com abas Dados pessoais e Contato e endereço), Agenda e Pré-visualizar abrem como janelas arrastáveis pela alça `⋮⋮`, sem fundo escurecido: o formulário continua utilizável por trás. `esc` fecha a janela do topo; ⌘K / Ctrl+K abre a busca; ⌘↵ salva. No celular as janelas ocupam a tela inteira.
+
+**Um rascunho por vez.** Com rascunho não salvo, abrir o prontuário de outro paciente mostra "Salvar e abrir" ou "Continuar escrevendo". Agenda e dados do paciente atual continuam editáveis, e salvar o cadastro nunca toca o rascunho clínico.
+
+**Login é a única outra página.** O fundo mostra só o wireframe do prontuário desfocado, sem nenhum dado carregado, e um modal fino centralizado pede o token. O token vai ao servidor, que responde com cookie `httpOnly`; o navegador não guarda o token.
+
+Ainda não desenhados pelo autor: ícones definitivos, a agenda completa (a do protótipo é uma proposta) e o cadastro de novo paciente. O arquivo do Figma não pôde ser lido sem login.
+
+Restrições:
+
+- reaproveitar `toast.tsx` e os componentes existentes onde couberem; substituir `app-shell.tsx` pelo novo shell;
+- trocar a fonte atual (IBM Plex Sans, em `app/app.css`) pela pilha Helvetica Neue + monoespaçada;
+- manter i18n pt-BR;
+- **não regredir** autosave, rascunho criptografado, `beforeunload` e erros recuperáveis do AGENTS.md;
+- testes de regressão do rascunho SOAP rodam antes e depois da troca de layout.
 
 ### Critérios de pronto da 0.3
 
@@ -220,7 +265,9 @@ O modelo será escolhido por benchmark, não por suposição. Candidatos levanta
 | D3.4 | Datas absolutas dentro do texto livre ("em 03/05 iniciou...") | **Converter para relativas** quando possível ("há 190 dias"); se não der, mascarar. Preserva a cronologia clínica. |
 | D3.5 | Nome de profissionais citados no texto ("encaminhado ao Dr. Fulano") | **Mascarar também** (`[PROFISSIONAL]`). O PEC MCP manteve o nome do profissional em campos estruturados, mas em texto livre a fronteira paciente/profissional é ambígua. |
 | D3.6 | Mostrar na interface o log de acessos de agentes por paciente | Adiar para depois do layout, salvo se o protótipo já o acomodar. |
-| D3.7 | Sidecar Python × in-process Node para NER | In-process, se o modelo escolhido tiver ONNX funcional. |
+| D3.7 | Sidecar Python × in-process Node para NER | In-process (`onnxruntime-node`), se a paridade span a span com o runtime Python fechar. |
+| D3.8 | Licença do pacote ONNX do `noharm-anony` | Confirmar com a NoHarm antes de embarcar o pacote na imagem; o modelo no Hugging Face é MIT. |
+| D3.9 | Abrir prontuário de outro paciente com rascunho pendente | Bloquear com "Salvar e abrir" / "Continuar escrevendo" (como no protótipo); sem segundo rascunho simultâneo. |
 
 ---
 
@@ -242,6 +289,8 @@ Extrair dados **objetivos** do texto livre (começando pelo Objetivo do SOAP) e 
 | Exames laboratoriais | "Hb 12,1; Cr 0,9; HbA1c 7,2%" | conforme o caso | a mapear por exame | `openEHR-EHR-OBSERVATION.laboratory_test_result.v1` |
 
 Os códigos LOINC e as versões de arquétipo devem ser **conferidos no LOINC e no openEHR CKM** antes da implementação. Os da tabela são o ponto de partida.
+
+Para exames e quantidades em texto livre, os modelos `pucpr/clinicalnerpt-laboratory` e `pucpr/clinicalnerpt-quantitative` (SemClinBr, pt-BR clínico) são candidatos a avaliar como camada após as regras. Os cards não declaram licença; confirmar antes de usar.
 
 ### Desenho
 

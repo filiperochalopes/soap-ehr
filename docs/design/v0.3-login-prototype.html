@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>soap / ehr · acessar prontuário (protótipo v0.3)</title>
+<!--
+  Tela de login (página própria). Fundo: só o wireframe do prontuário, desfocado e sem
+  nenhum dado carregado. Modal fino centralizado para digitar o token.
+  No app o token é enviado ao servidor, que responde com cookie httpOnly; o navegador
+  nunca guarda o token (AGENTS.md).
+-->
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="kit.js"></script>
+</head>
+<body class="h-screen overflow-hidden bg-bg font-sans text-base text-ink antialiased">
+
+<!-- wireframe de fundo: mesma grade do prontuário, sem dados -->
+<div aria-hidden="true" class="pointer-events-none grid h-screen select-none grid-rows-[56px_56px_minmax(0,1fr)_48px] opacity-60 blur-[3px]">
+  <div class="flex items-center gap-3 border-b border-line px-4">
+    <span class="size-3 rounded-full bg-line"></span><span class="h-2 w-12 rounded bg-line"></span>
+    <span class="h-3 w-px bg-line"></span><span class="h-2 w-12 rounded bg-line"></span><span class="h-2 w-10 rounded bg-line"></span>
+    <span class="ml-auto h-2 w-5 rounded bg-line"></span><span class="h-2 w-16 rounded bg-line"></span>
+  </div>
+  <div class="flex items-center border-b border-line px-4"><span class="h-2 w-16 rounded bg-line"></span></div>
+  <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_456px]">
+    <div class="space-y-3 border-r border-line px-4 pt-3">
+      <span class="block h-2 w-12 rounded bg-line"></span>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+    </div>
+    <div class="space-y-3 px-3 pt-3">
+      <span class="block h-2 w-12 rounded bg-line"></span>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+      <div class="space-y-1"><span class="block h-2 w-16 rounded bg-line"></span><span class="block h-10 rounded border border-line"></span></div>
+    </div>
+  </div>
+  <div class="flex items-center justify-between border-t border-line px-3">
+    <span class="h-2 w-16 rounded bg-line"></span><span class="h-2 w-24 rounded bg-line"></span><span class="h-2 w-12 rounded bg-line"></span>
+  </div>
+</div>
+
+<!-- modal de acesso -->
+<div class="fixed inset-0 grid place-items-center p-2">
+  <form id="login" class="w-full max-w-[512px] rounded border border-line bg-panel/95 p-5 shadow-2xl shadow-black/50" novalidate>
+    <p class="flex items-center gap-1.5 text-lg"><i data-icon="feather" class="size-3"></i>soap <span class="text-muted">/</span> ehr</p>
+    <h1 class="mt-3 text-2xl font-medium">Acessar prontuário</h1>
+    <p class="text-base text-accent">Digite seu token de acesso.</p>
+
+    <label for="token" class="mt-3 block text-base">Token de acesso</label>
+    <span class="relative mt-1 block">
+      <input id="token" type="password" autocomplete="current-password" autofocus
+        class="h-6 w-full rounded border border-line bg-transparent pl-2 pr-6 font-mono tracking-widest outline-none focus:border-accent" />
+      <button type="button" id="reveal" class="absolute right-1 top-1 grid size-4 place-items-center text-muted hover:text-ink" title="Mostrar token"><i data-icon="eye" class="size-2.5"></i></button>
+    </span>
+    <p id="err" class="mt-1 hidden text-sm text-danger">Informe o token de acesso.</p>
+
+    <button class="mt-3 flex h-6 w-full items-center justify-center rounded bg-accent px-3 text-lg font-medium text-accent-ink hover:brightness-110">
+      <span class="flex-1 text-center">Entrar</span><i data-icon="arrow-right" class="size-2.5"></i>
+    </button>
+    <p class="mt-2 font-mono text-sm text-accent">Acesso pessoal e seguro</p>
+  </form>
+</div>
+
+<script>
+  const input = document.getElementById("token");
+  document.getElementById("reveal").onclick = (e) => {
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    const b = e.currentTarget;
+    b.innerHTML = `<i data-icon="${show ? "eye-off" : "eye"}" class="size-2.5"></i>`;
+    hydrateIcons(b); input.focus();
+  };
+  input.oninput = () => { document.getElementById("err").classList.add("hidden"); input.classList.remove("border-danger"); };
+  document.getElementById("login").onsubmit = (e) => {
+    e.preventDefault();
+    if (!input.value.trim()) {
+      document.getElementById("err").classList.remove("hidden");
+      input.classList.add("border-danger");
+      return input.focus();
+    }
+    // Protótipo: qualquer token entra. No app: POST /login -> cookie httpOnly -> redirect.
+    location.href = "v0.3-layout-prototype.html";
+  };
+</script>
+</body>
+</html>
