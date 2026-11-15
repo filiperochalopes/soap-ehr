@@ -82,37 +82,40 @@
     </div>
     <div class="flex border-b border-line">
       <button data-ptab="hist" class="-mb-px h-6 border-b-2 px-2 text-lg" onclick="setPluginTab('hist')">Histórico</button>
-      <button data-ptab="scores" class="-mb-px ml-2 h-6 border-b-2 px-2 text-lg" onclick="setPluginTab('scores')">Scores</button>
+      <button data-ptab="plugins" class="-mb-px ml-2 h-6 border-b-2 px-2 text-lg" onclick="setPluginTab('plugins')">Plugins</button>
     </div>
 
     <div id="ptab-hist" class="pt-3">
-      <p class="font-mono text-sm uppercase tracking-widest text-muted">Histórico do paciente</p>
+      <div class="flex items-center">
+        <p class="font-mono text-sm uppercase tracking-widest text-muted">Histórico do paciente</p>
+        <div id="histFilter" class="ml-auto flex gap-0.5" role="group" aria-label="Filtrar seções do histórico"></div>
+      </div>
       <ol id="timeline" class="ml-1 mt-2 border-l border-line"></ol>
     </div>
-    <div id="ptab-scores" class="hidden pt-3">
+
+    <div id="ptab-plugins" class="hidden pt-3">
       <p class="font-mono text-sm uppercase tracking-widest text-muted">Scores deste atendimento</p>
-      <ul class="mt-2 divide-y divide-line">
+      <ul class="mt-1 divide-y divide-line">
         <li class="flex items-center py-1.5"><span>IMC</span><span class="ml-auto font-mono text-sm text-muted">aguarda peso/altura no O</span></li>
-        <li class="flex items-center py-1.5"><span>PREVENT · 10 anos</span><button class="ml-auto font-mono text-sm text-accent underline underline-offset-4" onclick="toast('Plugin Calculadoras (MCP) recebe o texto anonimizado.')">calcular</button></li>
+        <li class="flex items-center py-1.5"><span>PREVENT · 10 anos</span><button class="ml-auto font-mono text-sm text-accent underline underline-offset-4" onclick="toast('Plugin Calculadoras (MCP).')">calcular</button></li>
         <li class="flex items-center py-1.5"><span>CKD-EPI</span><span class="ml-auto font-mono text-sm text-muted">sem creatinina</span></li>
       </ul>
-    </div>
-
-    <div class="mt-3">
-      <details class="group border-t border-line">
-        <summary class="flex h-6 cursor-pointer list-none items-center px-1 text-lg font-medium [&::-webkit-details-marker]:hidden">Calculadoras clínicas<i data-icon="plus" class="ml-auto size-2.5 transition group-open:rotate-45"></i></summary>
-        <div class="space-y-1 px-1 pb-2 text-sm text-muted">
-          <p>IMC, PREVENT, CKD-EPI e outras via servidor MCP de scores.</p>
-          <button class="rounded border border-line px-2 text-ink hover:border-accent" onclick="toast('Abre a calculadora em janela flutuante.')">Abrir calculadoras</button>
-        </div>
-      </details>
-      <details id="attachDetails" class="group border-y border-line">
-        <summary class="flex h-6 cursor-pointer list-none items-center px-1 text-lg font-medium [&::-webkit-details-marker]:hidden">Anexos<i data-icon="plus" class="ml-auto size-2.5 transition group-open:rotate-45"></i></summary>
-        <ul class="px-1 pb-2 text-sm">
-          <li class="flex items-center py-0.5"><span>hemograma-out-2026.pdf</span><span class="ml-auto font-mono text-xs text-muted">MeuExame ✓</span></li>
-          <li class="flex items-center py-0.5"><span>usg-abdome.pdf</span><span class="ml-auto font-mono text-xs text-muted">412 KB</span></li>
-        </ul>
-      </details>
+      <div class="mt-3">
+        <details class="group border-t border-line">
+          <summary class="flex h-6 cursor-pointer list-none items-center px-1 text-lg font-medium [&::-webkit-details-marker]:hidden">Calculadoras clínicas<i data-icon="plus" class="ml-auto size-2.5 transition group-open:rotate-45"></i></summary>
+          <div class="space-y-1 px-1 pb-2 text-sm text-muted">
+            <p>IMC, PREVENT, CKD-EPI e outras via servidor MCP de scores.</p>
+            <button class="rounded border border-line px-2 text-ink hover:border-accent" onclick="toast('Abre a calculadora em janela flutuante.')">Abrir calculadoras</button>
+          </div>
+        </details>
+        <details id="attachDetails" class="group border-y border-line">
+          <summary class="flex h-6 cursor-pointer list-none items-center px-1 text-lg font-medium [&::-webkit-details-marker]:hidden">Anexos<i data-icon="plus" class="ml-auto size-2.5 transition group-open:rotate-45"></i></summary>
+          <ul class="px-1 pb-2 text-sm">
+            <li class="flex items-center py-0.5"><span>hemograma-out-2026.pdf</span><span class="ml-auto font-mono text-xs text-muted">MeuExame ✓</span></li>
+            <li class="flex items-center py-0.5"><span>usg-abdome.pdf</span><span class="ml-auto font-mono text-xs text-muted">412 KB</span></li>
+          </ul>
+        </details>
+      </div>
     </div>
   </aside>
 </main>
@@ -132,21 +135,22 @@
 const PATIENTS = [
   { id: "0042", name: "Marina Almeida", social: "", birth: "14/08/1984", age: 42, sex: "Feminino", cpf: "***.421.678-**", mother: "Helena Almeida", phone: "(71) 90000-0000", email: "marina@example.com", address: "Rua das Acácias, 120 · Salvador/BA",
     history: [
-      { date: "28 out 2026", title: "Consulta de acompanhamento", text: "PA controlada, sem queixas agudas. Ajustadas orientações de sono e rotina de exercícios." },
-      { date: "16 set 2026", title: "Consulta de acompanhamento", text: "Queixa persistente de insônia e cansaço diurno. Iniciadas medidas de higiene do sono e orientado retorno em 6–8 semanas." },
+      { date: "28 out 2026", kind: "soap", s: "Sem queixas agudas. Dorme cerca de 5 horas por noite.", o: "PA 132/84 mmHg, FC 76 bpm.", a: "HAS controlada. Insônia persistente.", p: "Ajustadas orientações de sono e rotina de exercícios. Retorno em 2 semanas." },
+      { date: "02 out 2026", kind: "narrative", n: "Contato por mensagem: dúvida sobre horário do enalapril. Orientada a manter pela manhã." },
+      { date: "16 set 2026", kind: "soap", s: "Insônia e cansaço diurno há 2 meses.", o: "PA 138/88 mmHg.", a: "Insônia crônica. HAS em seguimento.", p: "Iniciadas medidas de higiene do sono. Retorno em 6–8 semanas." },
     ] },
   { id: "0057", name: "Mariana Costa", social: "", birth: "03/05/1991", age: 35, sex: "Feminino", cpf: "***.909.334-**", mother: "Teresa Costa", phone: "(71) 90000-0001", email: "mariana@example.com", address: "Av. Oceânica, 45 · Salvador/BA",
-    history: [{ date: "02 ago 2026", title: "Primeira consulta", text: "Check-up. Sem comorbidades. Solicitados exames de rotina." }] },
+    history: [{ date: "02 ago 2026", kind: "soap", s: "Check-up, sem queixas.", o: "Exame físico sem alterações.", a: "Sem comorbidades.", p: "Solicitados exames de rotina." }] },
   { id: "0013", name: "Mário Almeida", social: "", birth: "21/02/1965", age: 61, sex: "Masculino", cpf: "***.118.902-**", mother: "Lúcia Almeida", phone: "(71) 90000-0002", email: "mario@example.com", address: "Rua do Sol, 8 · Lauro de Freitas/BA",
-    history: [{ date: "05 nov 2026", title: "Consulta de acompanhamento", text: "DM2 em ajuste de metformina. HbA1c 7,4%." }, { date: "10 jun 2026", title: "Consulta de acompanhamento", text: "Retorno com exames. Orientada dieta." }] },
+    history: [{ date: "05 nov 2026", kind: "soap", s: "Boa adesão à metformina.", o: "HbA1c 7,4%.", a: "DM2 fora da meta.", p: "Ajuste de metformina." }, { date: "10 jun 2026", kind: "soap", s: "Retorno com exames.", o: "Glicemia de jejum 142 mg/dL.", a: "DM2.", p: "Orientada dieta." }] },
   { id: "0071", name: "Rafael Souza", social: "", birth: "30/09/1998", age: 28, sex: "Masculino", cpf: "***.552.017-**", mother: "Cláudia Souza", phone: "(71) 90000-0003", email: "rafael@example.com", address: "Rua Chile, 22 · Salvador/BA", history: [] },
 ];
 const AGENDA = [
-  { time: "08:30", pid: "0013", status: "atendido" },
-  { time: "14:30", pid: "0042", status: "em atendimento" },
-  { time: "15:00", pid: "0057", status: "confirmado" },
-  { time: "15:30", pid: "0071", status: "sem resposta" },
-  { time: "16:00", pid: null, status: "livre" },
+  { id: 1, time: "08:00", end: "08:30", pid: "0013", type: "Consulta", title: "Consulta de acompanhamento", status: "Concluído", notes: "" },
+  { id: 2, time: "08:30", end: "09:00", pid: "0057", type: "Retorno", title: "Retorno com exames", status: "Concluído", notes: "" },
+  { id: 3, time: "09:00", end: "09:45", pid: "0042", type: "Consulta", title: "Consulta de acompanhamento", status: "Confirmado", notes: "Revisão de exames e acompanhamento." },
+  { id: 4, time: "10:00", end: "10:30", pid: null, type: "", title: "", status: "Livre", notes: "" },
+  { id: 5, time: "10:30", end: "11:00", pid: "0071", type: "Consulta", title: "Primeira consulta", status: "Confirmado", notes: "" },
 ];
 const SOAP = [
   ["s", "01 / S", "Subjetivo", "Queixa, história, contexto…"],
@@ -224,8 +228,7 @@ function setForm(type) {
 function saveEncounter() {
   if (!hasDraft()) { toast("Nada para salvar."); return false; }
   const v = Object.fromEntries(fields().map((t) => [t.dataset.key, t.value.trim()]));
-  const summary = (formType === "soap" ? v.a || v.s || v.p || v.o : v.n).split("\n")[0];
-  current.history.unshift({ date: "12 nov 2026", title: formType === "soap" ? "Consulta de acompanhamento" : "Nota narrativa", text: summary.length > 140 ? summary.slice(0, 140) + "…" : summary });
+  current.history.unshift(formType === "soap" ? { date: "12 nov 2026", kind: "soap", s: v.s, o: v.o, a: v.a, p: v.p } : { date: "12 nov 2026", kind: "narrative", n: v.n });
   fields().forEach((t) => { t.value = ""; grow(t); });
   localStorage.removeItem(draftKey());
   renderDraftState(); renderTimeline();
@@ -236,18 +239,34 @@ function saveEncounter() {
 
 /* ---------------- painel de plugins ---------------- */
 function setPluginTab(tab) {
-  ["hist", "scores"].forEach((t) => $("#ptab-" + t).classList.toggle("hidden", t !== tab));
+  ["hist", "plugins"].forEach((t) => $("#ptab-" + t).classList.toggle("hidden", t !== tab));
   document.querySelectorAll("[data-ptab]").forEach((b) => setTab(b, b.dataset.ptab === tab));
 }
+/* Filtro do histórico: [S] [O] [A] [P] [+]; todos ligados por padrão; "+" = notas narrativas. */
+const HIST_KEYS = [["s", "S", "Subjetivo"], ["o", "O", "Objetivo"], ["a", "A", "Avaliação"], ["p", "P", "Plano"], ["n", "+", "Narrativas"]];
+const histOn = new Set(HIST_KEYS.map(([k]) => k));
+function renderHistFilter() {
+  $("#histFilter").innerHTML = HIST_KEYS.map(([k, label, title]) => {
+    const on = histOn.has(k);
+    return `<button aria-pressed="${on}" title="${title}" onclick="toggleHist('${k}')" class="grid size-3 place-items-center rounded border font-mono text-xs ${on ? "border-accent bg-accent text-accent-ink" : "border-line text-muted hover:border-accent"}">${label}</button>`;
+  }).join("");
+}
+function toggleHist(k) { histOn.has(k) ? histOn.delete(k) : histOn.add(k); renderHistFilter(); renderTimeline(); }
 function renderTimeline() {
-  $("#timeline").innerHTML = current.history.length ? current.history.map((h) => `
-    <li class="relative pb-4 pl-3">
+  const items = current.history.map((h) => {
+    const parts = h.kind === "soap"
+      ? HIST_KEYS.slice(0, 4).filter(([k]) => histOn.has(k) && h[k]).map(([k, label]) => [label, h[k]])
+      : histOn.has("n") && h.n ? [["+", h.n]] : [];
+    if (!parts.length) return "";
+    return `
+    <li class="relative pb-3 pl-3">
       <span class="absolute -left-[6.5px] top-0.5 size-1.5 rounded-full bg-accent"></span>
-      <p class="font-mono text-sm text-accent">${esc(h.date)}</p>
-      <p class="text-lg font-medium">${esc(h.title)}</p>
-      <p class="mt-0.5 text-sm text-muted">${esc(h.text)}</p>
-      <a href="#" class="mt-1 inline-flex items-center gap-0.5 text-sm text-accent underline underline-offset-4" onclick="event.preventDefault();toast('Abre o registro em janela, sem sair do atendimento.')">Abrir registro<i data-icon="arrow-up-right" class="size-1.5"></i></a>
-    </li>`).join("") : `<li class="pl-3 text-sm text-muted">Nenhum registro anterior.</li>`;
+      <p class="flex items-center font-mono text-sm text-accent">${esc(h.date)}<span class="ml-1 text-muted">· ${h.kind === "soap" ? "SOAP" : "Narrativa"}</span>
+        <a href="#" class="ml-auto inline-flex items-center gap-0.5 font-sans text-sm text-accent underline underline-offset-4" onclick="event.preventDefault();toast('Abre o registro em janela, sem sair do atendimento.')">Abrir<i data-icon="arrow-up-right" class="size-1.5"></i></a></p>
+      <dl class="mt-0.5 space-y-0.5 text-sm">${parts.map(([label, txt]) => `<div class="flex gap-1"><dt class="w-1.5 shrink-0 font-mono text-muted">${label}</dt><dd>${esc(txt)}</dd></div>`).join("")}</dl>
+    </li>`;
+  }).join("");
+  $("#timeline").innerHTML = items || `<li class="pl-3 text-sm text-muted">${current.history.length ? "Nenhuma seção selecionada no filtro." : "Nenhum registro anterior."}</li>`;
   hydrateIcons($("#timeline"));
 }
 function renderPatientBar() {
@@ -458,20 +477,76 @@ function openDetails(id) {
   };
 }
 
-/* ---- agenda (proposta, ainda não desenhada) ---- */
-const STATUS = { "atendido": "text-muted", "em atendimento": "text-accent", "confirmado": "text-ink", "sem resposta": "text-warn", "livre": "text-faint" };
+/* ---- agenda (desenho do autor + botão Atender) ---- */
+const minutes = (a) => { const [h1, m1] = a.time.split(":").map(Number), [h2, m2] = a.end.split(":").map(Number); return h2 * 60 + m2 - h1 * 60 - m1; };
+const BADGE = { "Concluído": "bg-raised text-muted", "Confirmado": "bg-accent/20 text-accent", "Agendado": "border border-line text-ink", "Cancelado": "text-danger" };
+let agendaSel = 3, agendaView = "dia";
 function openAgenda() {
-  openWindow("agenda", {
-    title: "Agenda · 12 nov 2026", icon: "calendar", width: 72,
-    body: `<ul class="divide-y divide-line p-1">${AGENDA.map((a) => {
-      const p = a.pid && byId(a.pid);
-      return `<li class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-raised" onclick="${p ? `openPatient('${p.id}')` : "toast('Horário livre: agendar em linha, sem sair do atendimento.')"}">
-        <span class="font-mono text-sm text-muted">${a.time}</span>
-        <span class="${p ? "" : "text-faint"}">${p ? esc(p.name) : "Horário livre"}</span>
-        <span class="ml-auto font-mono text-xs ${STATUS[a.status]}">${a.status}</span></li>`;
-    }).join("")}</ul>`,
-    strip: "Agenda · proposta, ainda não desenhada",
-  });
+  const w = openWindow("agenda", { title: "Agenda", icon: "calendar", width: 134, body: `<div id="agendaBody"></div>` });
+  renderAgenda(); return w;
+}
+function renderAgenda() {
+  const box = $("#agendaBody"); if (!box) return;
+  const a = AGENDA.find((x) => x.id === agendaSel);
+  const p = a?.pid && byId(a.pid);
+  const toolbar = `
+    <div class="flex items-center gap-1 border-b border-line px-3 py-1.5">
+      <button class="grid size-5 place-items-center rounded border border-line hover:border-accent" title="Dia anterior" onclick="toast('Dia anterior')"><i data-icon="chev-l" class="size-2.5"></i></button>
+      <button class="h-5 rounded border border-line px-2 hover:border-accent" onclick="toast('Hoje')">Hoje</button>
+      <button class="grid size-5 place-items-center rounded border border-line hover:border-accent" title="Próximo dia" onclick="toast('Próximo dia')"><i data-icon="chev-r" class="size-2.5"></i></button>
+      <h4 class="ml-2 text-xl font-medium">Quinta-feira, 12 nov 2026</h4>
+      <div class="ml-auto flex overflow-hidden rounded border border-line">
+        ${["dia", "semana"].map((v) => `<button class="h-5 px-3 ${agendaView === v ? "bg-accent font-medium text-accent-ink" : "hover:bg-raised"}" onclick="agendaView='${v}';renderAgenda()">${v === "dia" ? "Dia" : "Semana"}</button>`).join("")}
+      </div>
+      <button class="ml-2 flex h-5 items-center gap-1 rounded border border-line px-2 hover:border-accent" onclick="toast('Novo evento: formulário à direita, em branco.')"><i data-icon="plus" class="size-2"></i>Evento</button>
+    </div>`;
+  if (agendaView === "semana") {
+    box.innerHTML = toolbar + `<div class="grid grid-cols-5 gap-px bg-line">${["Seg 9", "Ter 10", "Qua 11", "Qui 12", "Sex 13"].map((d, i) => `
+      <div class="min-h-32 bg-panel p-1"><p class="font-mono text-xs ${i === 3 ? "text-accent" : "text-muted"}">${d}</p>
+        ${(i === 3 ? AGENDA.filter((x) => x.pid) : []).map((x) => `<p class="mt-0.5 truncate rounded bg-raised px-1 text-xs"><span class="font-mono text-muted">${x.time}</span> ${esc(byId(x.pid).name)}</p>`).join("")}
+      </div>`).join("")}</div>
+      <div class="flex px-3 py-1 text-sm text-muted"><span>Visão semanal · proposta</span></div>`;
+    return hydrateIcons(box);
+  }
+  box.innerHTML = toolbar + `
+    <div class="grid grid-cols-[minmax(0,1fr)_496px]">
+      <div class="flex flex-col border-r border-line">
+        <ul class="divide-y divide-line px-3">${AGENDA.map((x) => {
+          const q = x.pid && byId(x.pid), on = x.id === agendaSel;
+          return `<li class="-mx-1 my-0.5 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 ${on ? "bg-accent/10 shadow-[inset_3px_0_0_#a8c47e]" : "hover:bg-raised"}" onclick="agendaSel=${x.id};renderAgenda()">
+            <span class="w-6 font-mono text-base ${on ? "text-accent" : "text-muted"}">${x.time}</span><span class="h-5 w-px bg-line"></span>
+            ${q ? `<div><p class="text-lg font-medium">${esc(q.name)}</p><p class="text-sm text-muted">${x.type} · ${minutes(x)} min</p></div>` : `<p class="italic text-muted">Horário livre</p>`}
+            <span class="ml-auto flex items-center gap-1">
+              ${q && on ? `<button class="flex h-4 items-center gap-0.5 rounded bg-accent px-1.5 text-sm font-medium text-accent-ink" onclick="event.stopPropagation();attend(${x.id})" title="Abrir o prontuário deste paciente">Atender<i data-icon="arrow-right" class="size-1.5"></i></button>` : ""}
+              ${q ? `<span class="rounded px-1 text-sm ${BADGE[x.status] || ""}">${x.status}</span>` : ""}
+            </span></li>`;
+        }).join("")}</ul>
+        <div class="mt-auto flex border-t border-line px-3 py-1 text-sm text-muted"><span>${AGENDA.filter((x) => x.pid).length} atendimentos</span><span class="ml-auto">Horários em Brasília</span></div>
+      </div>
+      <div class="p-3">
+        ${a && p ? `
+        <div class="flex items-center"><h4 class="text-xl font-medium">Editar evento</h4><span class="ml-auto flex items-center gap-1 text-sm"><span class="size-1 rounded-full bg-accent"></span>${a.type}</span></div>
+        <div class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
+          <label class="col-span-2 block"><span class="text-sm text-accent">Paciente</span><span class="relative mt-0.5 block"><i data-icon="search" class="pointer-events-none absolute left-1.5 top-1 size-2.5 text-muted"></i><input value="${esc(p.name)}" class="h-5 w-full rounded border border-line bg-transparent pl-5 pr-2 outline-none focus:border-accent" /></span></label>
+          <label class="col-span-2 block"><span class="text-sm text-accent">Título</span><input value="${esc(a.title)}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
+          <label class="col-span-2 block"><span class="text-sm text-accent">Data</span><span class="relative mt-0.5 block"><input value="12/11/2026" class="h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /><i data-icon="calendar" class="pointer-events-none absolute right-1.5 top-1 size-2.5 text-muted"></i></span></label>
+          <label class="block"><span class="text-sm text-accent">Início</span><input value="${a.time}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
+          <label class="block"><span class="text-sm text-accent">Término</span><input value="${a.end}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
+          <label class="col-span-2 block"><span class="text-sm text-accent">Status</span><span class="relative mt-0.5 block"><select class="h-5 w-full appearance-none rounded border border-line bg-transparent px-2 outline-none focus:border-accent">${["Agendado", "Confirmado", "Concluído", "Cancelado"].map((s) => `<option class="bg-panel" ${s === a.status ? "selected" : ""}>${s}</option>`).join("")}</select><i data-icon="chevron" class="pointer-events-none absolute right-1.5 top-1 size-2.5 text-muted"></i></span></label>
+          <label class="col-span-2 block"><span class="text-sm text-accent">Observações</span><textarea rows="2" class="mt-0.5 block w-full resize-none rounded border border-line bg-transparent px-2 py-0.5 outline-none focus:border-accent">${esc(a.notes)}</textarea></label>
+        </div>
+        <div class="mt-2 flex items-center gap-1">
+          <a href="#" class="text-sm text-accent underline underline-offset-4" onclick="event.preventDefault();toast('Excluir evento (com confirmação).')">Excluir evento</a>
+          <button class="ml-auto h-5 rounded border border-line px-2 hover:border-accent" onclick="closeWindow('agenda')">Cancelar</button>
+          <button class="h-5 rounded bg-accent px-2 font-medium text-accent-ink" onclick="toast('Evento salvo. O rascunho clínico continua intacto.')">Salvar evento</button>
+        </div>` : `<p class="text-muted">Horário livre. Use <b class="font-medium text-ink">+ Evento</b> para agendar.</p>`}
+      </div>
+    </div>`;
+  hydrateIcons(box);
+}
+function attend(id) {
+  const a = AGENDA.find((x) => x.id === id);
+  openPatient(a.pid);
 }
 
 /* ---- pré-visualização e anexos ---- */
@@ -489,7 +564,7 @@ function openPreview() {
   });
 }
 function openAttachments() {
-  setPluginTab("hist");
+  setPluginTab("plugins");
   $("#attachDetails").open = true;
   $("#attachDetails").scrollIntoView({ behavior: "smooth", block: "nearest" });
   toast("Selecione um arquivo: o anexo fica vinculado a este rascunho.");
@@ -515,7 +590,7 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("beforeunload", () => { clearTimeout(saveTimer); persistDraft(); });
 
-renderPatientBar(); renderTimeline(); setPluginTab("hist"); loadDraft();
+renderPatientBar(); renderHistFilter(); renderTimeline(); setPluginTab("hist"); loadDraft();
 </script>
 </body>
 </html>
