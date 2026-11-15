@@ -11,7 +11,7 @@ Planejamento das próximas versões do `soap-ehr`. Este documento registra a int
 | [0.1](#v01--mvp-fhir-first-entregue) | MVP: FHIR first | Entregue (`v0.1.0`) |
 | [0.2](#v02--modelo-informacional-openehr--omop-entregue) | Modelo informacional openEHR + OMOP | Entregue (`v0.2.0-beta`, `v0.2.0`) |
 | [0.3](#v03--agentes-externos-via-mcp-anonimização-e-novo-layout) | Agentes externos via MCP, anonimização e novo layout | Planejada (próxima) |
-| [0.4](#v04--enriquecimento-de-dados) | Enriquecimento de dados: texto livre → dado estruturado (openEHR, FHIR, OMOP) | Planejada |
+| [0.4](#v04--enriquecimento-de-dados) | Enriquecimento de dados: texto livre → dado estruturado (openEHR, FHIR, OMOP) e réplicas anonimizadas das tabelas | Planejada |
 | [0.5](#v05--arquitetura-de-plugins) | Arquitetura de plugins em repositórios separados | Planejada |
 | [0.6](#v06--oauth) | Segurança de acesso com OAuth | Planejada |
 | [1.0](#v10--estável) | Versão estável | A definir |
@@ -72,6 +72,15 @@ Valem para todas as versões. Detalham o [AGENTS.md](../AGENTS.md); não o subst
 ### Objetivo
 
 Permitir que qualquer *harness* de agente LLM que fale MCP (Claude Desktop, Claude Code, Codex, Hermes, LangGraph etc.) leia dados do prontuário e monte fluxos com eles. Os dados chegam **anonimizados**, com um token de escopo próprio. Na mesma versão, redesenhar o layout da aplicação.
+
+> **Revisão de escopo (12/11/2026).** O MCP é a prioridade da 0.3 e sai primeiro como MVP. O plano detalhado, que **substitui os itens 1, 2, 5 e 6 abaixo**, está em [`v0.3-mcp-plan.md`](v0.3-mcp-plan.md). O layout vem depois.
+>
+> - **ID do paciente:** o modelo só conhece o paciente pelo **id do banco**, citado como `@P<id>`. Recebe iniciais, idade (anos; meses abaixo de 1 ano) e sexo, nunca o nome.
+> - **Ferramentas do MVP:** `localizar_paciente` (por ID, nome ou nome + nascimento), `listar_agenda` e `listar_registros`.
+> - **Parser de reidratação:** relatórios de agentes externos voltam a ter nomes por um parser determinístico fora do LLM (`@P42` → "Nome (idade)").
+> - **Datas** não são transformadas (risco aceito).
+> - **Anonimização:** a da 0.3 fica em projeção + regex + dicionário do próprio registro. A **camada 4 (NER) e o spike de modelo (itens 3 e 4 abaixo) passam para a 0.4**, junto com a réplica `deid`.
+> - **Decisões:** D3.2, D3.3 e D3.4 foram revistas (ver tabela).
 
 ### Escopo
 
@@ -156,7 +165,9 @@ Correção da versão anterior deste documento: o BERTimbau-large **não** é gr
 
 O que **não** precisamos copiar: orçamento de tempo e redação parcial (resolvem notas de 76 mil caracteres atrás do timeout do NiFi), RTF e o serviço FastAPI. Aqui a regra é falha fechada: se não couber, não sai.
 
-**Runtime:** de preferência *in-process* no Node via `onnxruntime-node`, portando o runtime do pacote (~460 linhas Python) para TypeScript com um teste de **paridade span a span** contra o runtime Python no corpus sintético. A alternativa é um sidecar Python mínimo no `compose.yml` com o runtime original, se a paridade não fechar (decisão D3.7).
+**Incorporar o modelo, não o microsserviço** (decisão do autor). O `soap-ehr` não sobe o serviço `noharm-anony` (FastAPI) nem depende dele em runtime. O que entra no projeto é o **modelo** (o `noharm-ai/anony` publicado no Hugging Face em formato Flair, MIT, ou o pacote ONNX derivado dele) mais a lógica de redação descrita acima, reimplementada aqui e coberta pelos nossos testes.
+
+**Runtime:** de preferência *in-process* no Node via `onnxruntime-node`, portando o runtime do pacote (~460 linhas Python) para TypeScript com um teste de **paridade span a span** contra o runtime Python no corpus sintético. A alternativa é um processo Python mínimo que carrega só o modelo (sem o serviço da NoHarm), se a paridade não fechar (decisão D3.7).
 
 **Protocolo do spike** (throwaway, fora do repositório principal):
 
@@ -223,11 +234,13 @@ Direção visual: interface com aspecto de **terminal**, fundo verde-oliva escur
 
 | Região | Conteúdo |
 | --- | --- |
-| Header | `soap / ehr`, Pacientes, Agenda, idioma, usuário |
+| Header | `soap / ehr`, Pacientes, Agenda, idioma, usuário (só tema escuro: o botão de tema atual sai) |
 | Barra do paciente | `PACIENTE / 0042`, nome (abre os detalhes), idade e sexo, data do atendimento |
 | Formulário (esquerda) | abas SOAP / Narrativa, estado do rascunho, seções numeradas `01 / S` a `04 / P` em texto corrido; barra inferior com Anexar, Pré-visualizar e **Salvar atendimento ↵** |
-| Plugins (direita) | título `PLUGINS` com engrenagem, abas de plugin (Histórico, Scores), seções recolhíveis (Calculadoras clínicas, Anexos) |
+| Coluna direita | título `PLUGINS` com engrenagem e duas abas. **Histórico**: linha do tempo com filtro `[S] [O] [A] [P] [+]`, todos ligados por padrão, `+` = narrativas. **Plugins**: scores e seções recolhíveis (Calculadoras clínicas, Anexos). |
 | Rodapé | `soap-ehr` e versão, "Prontuário pessoal", estado da conexão |
+
+**Agenda** (desenho do autor): janela com dia anterior / Hoje / próximo, visão Dia ou Semana e `+ Evento`. À esquerda, a lista do dia (horário, paciente, tipo · duração, status); à direita, "Editar evento" (paciente, título, data, início, término, status, observações; Excluir, Cancelar, Salvar). A linha selecionada tem o botão **Atender**, que abre o prontuário respeitando a trava de rascunho. O modelo `Appointment` ainda não tem título nem observações.
 
 **Janelas flutuantes.** Buscar paciente, Detalhes do paciente (editável, com abas Dados pessoais e Contato e endereço), Agenda e Pré-visualizar abrem como janelas arrastáveis pela alça `⋮⋮`, sem fundo escurecido: o formulário continua utilizável por trás. `esc` fecha a janela do topo; ⌘K / Ctrl+K abre a busca; ⌘↵ salva. No celular as janelas ocupam a tela inteira.
 
@@ -235,7 +248,7 @@ Direção visual: interface com aspecto de **terminal**, fundo verde-oliva escur
 
 **Login é a única outra página.** O fundo mostra só o wireframe do prontuário desfocado, sem nenhum dado carregado, e um modal fino centralizado pede o token. O token vai ao servidor, que responde com cookie `httpOnly`; o navegador não guarda o token.
 
-Ainda não desenhados pelo autor: ícones definitivos, a agenda completa (a do protótipo é uma proposta) e o cadastro de novo paciente. O arquivo do Figma não pôde ser lido sem login.
+Ainda não desenhados pelo autor: ícones definitivos, a visão semanal da agenda e o cadastro de novo paciente. O arquivo do Figma não pôde ser lido sem login.
 
 Restrições:
 
@@ -260,14 +273,14 @@ Restrições:
 | # | Decisão | Recomendação |
 | --- | --- | --- |
 | D3.1 | Token `full` também acessa `/mcp`? | **Não.** `/mcp` exige exatamente `agent`. Assim um token vazado de agente não lê o prontuário, e um token `full` não é colado num harness por comodidade. |
-| D3.2 | Iniciais do paciente vão na saída? | **Sim**, como no PEC MCP. Mas `buscar_pacientes` não aceita nome completo como filtro, só iniciais. |
-| D3.3 | `paciente_ref` opaco (HMAC) ou `patient.id` real? | **HMAC.** O id real permitiria cruzar com a API FHIR usando outro token. |
-| D3.4 | Datas absolutas dentro do texto livre ("em 03/05 iniciou...") | **Converter para relativas** quando possível ("há 190 dias"); se não der, mascarar. Preserva a cronologia clínica. |
+| D3.2 | Iniciais do paciente vão na saída? | **Decidido: sim**, com idade e sexo, nunca o nome. |
+| D3.3 | `paciente_ref` opaco (HMAC) ou `patient.id` real? | **Decidido: `patient.id` real** (KISS). O token `agent` não alcança a API FHIR, então o cruzamento exige outro token. |
+| D3.4 | Datas absolutas dentro do texto livre ("em 03/05 iniciou...") | **Decidido: não transformar** datas na 0.3 (KISS, risco aceito). Revisitar na 0.4 com a réplica `deid`. |
 | D3.5 | Nome de profissionais citados no texto ("encaminhado ao Dr. Fulano") | **Mascarar também** (`[PROFISSIONAL]`). O PEC MCP manteve o nome do profissional em campos estruturados, mas em texto livre a fronteira paciente/profissional é ambígua. |
-| D3.6 | Mostrar na interface o log de acessos de agentes por paciente | Adiar para depois do layout, salvo se o protótipo já o acomodar. |
-| D3.7 | Sidecar Python × in-process Node para NER | In-process (`onnxruntime-node`), se a paridade span a span com o runtime Python fechar. |
+| D3.6 | Mostrar na interface o log de acessos de agentes por paciente | Adiado. A auditoria já grava o paciente consultado. |
+| D3.7 | Sidecar Python × in-process Node para NER | In-process (`onnxruntime-node`), se a paridade span a span com o runtime Python fechar. Em qualquer caso, o modelo é incorporado; o microsserviço `noharm-anony` não é usado. |
 | D3.8 | Licença do pacote ONNX do `noharm-anony` | Confirmar com a NoHarm antes de embarcar o pacote na imagem; o modelo no Hugging Face é MIT. |
-| D3.9 | Abrir prontuário de outro paciente com rascunho pendente | Bloquear com "Salvar e abrir" / "Continuar escrevendo" (como no protótipo); sem segundo rascunho simultâneo. |
+| D3.9 | Abrir prontuário de outro paciente com rascunho pendente | **Decidido:** "Salvar e abrir" ou "Continuar escrevendo", sem opção de descartar ali. |
 
 ---
 
@@ -276,6 +289,8 @@ Restrições:
 ### Objetivo
 
 Extrair dados **objetivos** do texto livre (começando pelo Objetivo do SOAP) e transformá-los em dados estruturados e versionados, com proveniência explícita de que foram **derivados de texto não estruturado**. Esses dados alimentam gráficos de evolução na interface, o MCP e o OMOP.
+
+Na mesma versão entram a **anonimização rigorosa vinda da 0.3** (camada 4, NER de nomes, com o spike de seleção do modelo descrito na 0.3, item 4) e a **materialização de réplicas anonimizadas** das tabelas clínicas e dos fatos derivados, para pesquisa, agentes e testes sem tocar no dado identificado. Ver [Réplicas anonimizadas](#réplicas-anonimizadas-schema-deid).
 
 ### Escopo inicial (começar pequeno)
 
@@ -290,7 +305,28 @@ Extrair dados **objetivos** do texto livre (começando pelo Objetivo do SOAP) e 
 
 Os códigos LOINC e as versões de arquétipo devem ser **conferidos no LOINC e no openEHR CKM** antes da implementação. Os da tabela são o ponto de partida.
 
-Para exames e quantidades em texto livre, os modelos `pucpr/clinicalnerpt-laboratory` e `pucpr/clinicalnerpt-quantitative` (SemClinBr, pt-BR clínico) são candidatos a avaliar como camada após as regras. Os cards não declaram licença; confirmar antes de usar.
+### Extração de entidades: candidatos
+
+Levantamento de 12/11/2026 nos cards do Hugging Face e na documentação do HunFlair2. Nenhum foi medido ainda; todos entram como candidatos de uma camada **depois** das regras determinísticas.
+
+| Candidato | O que faz | Licença no card | Uso possível |
+| --- | --- | --- | --- |
+| `pucpr/clinicalnerpt-*` (laboratory, quantitative, disorder, chemical, procedure, finding, sign, therapeutic etc.) | NER clínico pt-BR, um modelo por tipo de entidade (SemClinBr) | não declarada | exames, valores, condições e medicamentos citados no texto |
+| `pucpr-br/tempclin-biobertpt-clin` | NER temporal clínico pt-BR (corpus TempClinBr) | não declarada | datas e expressões de tempo; ajuda a datar o fato e a converter datas absolutas em relativas (D3.4) |
+| `pucpr-br/cardiobertpt` | NER clínico em cardiologia, pt-BR | Apache-2.0 | achados cardiovasculares |
+| `pucpr/biobertpt-clin` | modelo base clínico pt-BR (fill-mask) | não declarada | base para fine-tuning próprio, se necessário |
+| `pucpr-br/Clinical-BR-Mistral-7B-v0.2` | LLM 7B pt-BR para gerar notas clínicas (MED-LLM-BR) | Apache-2.0 | alternativa local a LLM externo na extração assistida (D4.3); pesado para a VPS sem GPU, medir antes |
+| `pucpr-br/medgemma-pt-finetuned-multiclinsum` | MedGemma 4B ajustado para sumarização de casos clínicos em pt-BR | Gemma | plugin de resumo local (v0.5), não extração |
+| HunFlair2 (Flair) | NER + *linking* biomédico para genes, químicos, doenças, espécies e linhagens celulares | ver repositório Flair | a documentação descreve literatura biomédica, sem menção a português; vale como **referência de desenho** (NER seguido de normalização para ontologia), não como modelo a incorporar |
+
+Regras que valem para qualquer modelo desta tabela:
+
+- confirmar licença antes de empacotar; sem licença declarada, não entra na imagem;
+- incorporar o modelo (ONNX quando possível), não um serviço de terceiros, pelo mesmo motivo da 0.3;
+- o texto que chega a um LLM é sempre o anonimizado; modelos locais de NER podem ler o texto original, porque nada sai do servidor;
+- toda entidade extraída precisa de **normalização** para um código (LOINC, CID-10, CIAP-2, SNOMED CT, ATC) antes de virar fato; entidade sem código fica como `sugerido` sem projeção OMOP.
+
+**Alvos de extração guiados pela APS.** A KB de Atenção Primária do autor já modela `Dado clínico e medida` como **tipos de observação LOINC** (e não como documentos) e `Indicador e programa` com numerador e denominador apontando para dados e condições. Isso dá a ordem de prioridade: extrair primeiro as medidas que alimentam acompanhamento de APS (PA e peso/IMC em hipertensão e obesidade, glicemia e HbA1c em diabetes) e deixar o resto para depois.
 
 ### Desenho
 
@@ -320,7 +356,37 @@ Para exames e quantidades em texto livre, os modelos `pucpr/clinicalnerpt-labora
    - Job assíncrono após o salvamento da composição, fora da transação clínica: uma falha no extrator nunca impede salvar a nota.
    - Mais um comando de *backfill* idempotente para o histórico (`pnpm enrich:backfill`), com `--dry-run`.
 
-### Critérios de pronto da 0.4
+### Réplicas anonimizadas (schema `deid`)
+
+**Objetivo.** Ter, no mesmo PostgreSQL, uma cópia das tabelas clínicas em que todo texto e todo identificador já passou pelo pipeline de anonimização da 0.3 (regras + dicionário do registro + modelo NER). Quem precisa de dado mas não de identidade (agentes MCP, pesquisa OMOP, testes, benchmarks, exportação) passa a ler daqui.
+
+**Desenho**, seguindo o mesmo padrão do OMOP (`omop` + `soap_ehr_etl`):
+
+```text
+soap_ehr (PostgreSQL)
+├── public        canônico, identificado (fonte da verdade)
+├── omop          projeção OMOP do canônico
+├── deid          réplica anonimizada: pacientes, atendimentos, composições, fatos derivados
+└── soap_ehr_etl  proveniência das execuções (canônico → omop, canônico → deid)
+```
+
+| Tabela canônica | Na réplica `deid` |
+| --- | --- |
+| `Patient` | `paciente_ref` (HMAC, o mesmo da 0.3), sexo, idade na data de referência ou ano de nascimento deslocado (D4.5); sem nome, documentos, contatos ou endereço |
+| `Appointment` | `paciente_ref`, data deslocada, status |
+| `CompositionVersion` | template, data deslocada, seções S/O/A/P **anonimizadas** com marcadores `[PESSOA_n]` |
+| fatos derivados (esta versão) | valor, unidade, código, estado e data deslocada; o trecho de origem guardado já anonimizado |
+
+Regras:
+
+1. **Derivada e reconstruível.** Nada escreve de volta em `public`; a réplica pode ser apagada e refeita a qualquer momento. Nenhuma requisição web identificada lê `deid`.
+2. **Falha fechada por linha.** Se o anonimizador falhar numa composição, ela **não** entra na réplica e a execução registra só a contagem de falhas, nunca o texto.
+3. **Proveniência.** Cada execução grava em `soap_ehr_etl`: versão do pipeline de anonimização, versão do modelo NER, hash da blocklist, contagens por tabela e falhas.
+4. **Mesmos testes da 0.3.** A suíte de regressão de PII roda também sobre as linhas da réplica gerada a partir da fixture sintética.
+5. **Pseudonimizado, não anônimo.** Com `paciente_ref` estável a réplica é dado **pseudonimizado** no sentido da LGPD (art. 13, §4): continua sendo dado pessoal, protegido e auditado. Num prontuário pessoal a população é pequena; idade + sexo + condição rara podem reidentificar alguém. Exportações para fora do servidor exigem revisão de quase-identificadores (D4.8).
+6. **Execução.** Comando batch idempotente (`pnpm deid:build`, com `--dry-run`) e atualização incremental depois de cada composição salva, fora da transação clínica, como o job de enriquecimento.
+7. **OMOP anonimizado.** O ETL OMOP pode rodar uma segunda vez a partir de `deid` (gerando um `omop_deid`) quando houver uso de pesquisa real; até lá, só a réplica.
+
 
 - [ ] Extrator de sinais vitais com suíte de testes (formatos reais variados, vírgula decimal, "PA 13x8" em cmHg, valores implausíveis rejeitados).
 - [ ] Tabela de fatos derivados com proveniência e estado. Migração aditiva.
@@ -328,6 +394,8 @@ Para exames e quantidades em texto livre, os modelos `pucpr/clinicalnerpt-labora
 - [ ] Painel de revisão e gráficos de PA e peso.
 - [ ] Projeção FHIR `Observation` e ETL OMOP `MEASUREMENT`, com verificação de contagens e de proveniência.
 - [ ] Avaliação de precisão e recall do extrator num conjunto anotado manualmente (pequeno, sintético ou revisado pelo médico).
+- [ ] Schema `deid` materializado por `pnpm deid:build` a partir da fixture sintética, com a suíte de PII passando sobre as linhas geradas e proveniência registrada em `soap_ehr_etl`.
+- [ ] Falha do anonimizador numa composição deixa a linha fora da réplica e aparece só como contagem.
 
 ### Decisões abertas da 0.4
 
@@ -337,6 +405,10 @@ Para exames e quantidades em texto livre, os modelos `pucpr/clinicalnerpt-labora
 | D4.2 | Fatos `sugerido` (não revisados) entram no OMOP? | **Não por padrão.** Entram só os `confirmado`. Opcionalmente, uma flag de ETL exporta os sugeridos com outro type concept, para pesquisa. |
 | D4.3 | LLM para exames laboratoriais já na 0.4? | Só depois do extrator de regras de sinais vitais estar estável. O LLM recebe apenas o texto anonimizado. |
 | D4.4 | Entrada estruturada nativa no formulário SOAP (campos de PA e peso) | Adiar. A 0.4 trata o texto que já existe. A entrada nativa é outra frente e muda o template canônico. |
+| D4.5 | Datas na réplica: deslocamento por paciente × datas relativas | **Deslocamento aleatório e estável por paciente** (mesmo deslocamento em todas as datas dele), que preserva intervalos e sazonalidade aproximada. O MCP da 0.3 continua entregando `dias_atras`. |
+| D4.6 | O MCP passa a ler da réplica em vez de anonimizar a cada chamada? | **Sim, quando a réplica existir.** Tira o NER do caminho da requisição e garante que o agente veja exatamente o que os testes verificaram. Até lá, anonimização na hora, como na 0.3. |
+| D4.7 | Iniciais do paciente na réplica | **Não.** Na réplica, só `paciente_ref`. Iniciais ajudam na conversa com o agente, mas não em pesquisa, e são quase-identificador. |
+| D4.8 | Liberar a réplica (ou `omop_deid`) para fora do servidor | Só depois de uma checagem de quase-identificadores (contagens mínimas por combinação de idade, sexo e condição) e de decisão registrada. |
 
 ---
 
@@ -356,6 +428,13 @@ Hoje o sistema é um monolito com plugins **compilados junto**. A meta é separa
 | Documentos clínicos (docs.filipelopes.med.br) | Integração com webhook | `app/lib/plugins/docs/`, `integrations.docs.webhook.ts` |
 
 Já existem `SoapPlugin`/`Plugin<TProps>` (`app/lib/soap-plugins/types.ts`), registries estáticos e credenciais por usuário criptografadas (`UserPluginCredential`, `PLUGIN_SECRET_ENCRYPTION_KEY`).
+
+**Plugins planejados** (registrados em 12/11/2026):
+
+| Plugin | O que faz |
+| --- | --- |
+| Relatório de preparo do dia | Na véspera, lê a agenda e o histórico de cada paciente pelo MCP e devolve pendências, perguntas de acompanhamento e sugestões de seguimento, com nomes reidratados pelo parser. É o caso de uso do MVP do MCP, trazido para dentro do app; semelhante ao resumo IPS, com outro prompt. |
+| Chat clínico com hidratação pelo contexto | Chat no prontuário: o paciente aberto na tela fornece o ID, o LLM recebe só o ID e a resposta volta com nome. É a única forma de o nome nunca entrar no prompt mesmo quando a pergunta cita o paciente. |
 
 ### Desenho proposto
 
@@ -461,3 +540,21 @@ Critérios propostos para declarar a 1.0. A definir ao fim da 0.6:
 - Model Context Protocol — Specification and Authorization: https://modelcontextprotocol.io
 - OHDSI OMOP CDM 5.4 e convenções: https://ohdsi.github.io/CommonDataModel/
 - openEHR Clinical Knowledge Manager: https://ckm.openehr.org
+- NoHarm Anony: modelo `noharm-ai/anony` no Hugging Face e repositório `noharm-ai/noharm-anony`. Base da camada NER de nomes (0.3); o modelo é incorporado, o serviço não.
+- HAILab-PUCPR, organizações `pucpr` e `pucpr-br` no Hugging Face: modelos clínicos pt-BR candidatos à extração da 0.4.
+- HunFlair2 (Flair): https://github.com/flairNLP/flair/blob/master/resources/docs/HUNFLAIR2.md. Referência de desenho NER + normalização.
+- MedScribe (Vals AI), em Clinical Benchmarks: https://clinicalbenchmarks.ai/benchmarks/medscribe. Avalia notas SOAP geradas a partir de consultas, com 100 casos pontuados por rubrica de qualidade e conformidade. Referência para avaliar um futuro plugin de transcrição/escrita assistida (v0.5) e o resumo IA; os líderes estão perto de 90%, então o benchmark diz pouco para diferenciar os melhores modelos.
+
+### Leituras a fazer
+
+Itens triados na KB *Health Informatics* do autor, registrados só pelo título e metadados (ainda não lidos integralmente). Entram aqui como perguntas, não como evidência:
+
+| Fonte | Por que pode importar |
+| --- | --- |
+| *MIMIC-Note-Extract: A Large-Scale Structured Dataset Extracted from MIMIC-IV-Note Discharge Summaries* (arXiv:2611.04685) | desenho e avaliação de extração estruturada a partir de notas (0.4) |
+| *M4Bench: Evaluating Procedural Specification for Clinical EHR Derivation Agents* (arXiv:2610.37459) | como especificar e avaliar agentes que derivam variáveis do prontuário (0.3/0.4) |
+| *EHR-RobustGym: Benchmarking and Training Agents for Robust Clinical Reasoning* (arXiv:2609.39371) | robustez de agentes sobre EHR; complementa o benchmark do item 6 da 0.3 |
+| *Conversational Interaction for LLM-Based Clinical Text-to-SQL* (arXiv:2611.00605) | contraponto à decisão de não expor SQL genérico no MCP |
+| *Context is built, not given: context readiness as the next benchmark for clinical use of AI* (Lancet Digit Health, doi:10.1016/j.landig.2026.101124) | o que o agente precisa receber de contexto; relaciona-se ao perfil do paciente no MCP |
+| *FHIR Data Mapping Quality Assessment: A Scoping Review* (doi:10.34133/csbj.0231) | qualidade das projeções FHIR dos fatos derivados |
+| *Evaluating Case Selection for Human Oversight in Clinical AI* (doi:10.1007/s10916-026-02475-1) | quais fatos `sugerido` priorizar na revisão humana |
