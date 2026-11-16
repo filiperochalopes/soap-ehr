@@ -1,3 +1,4 @@
+import { scrubClinicalText, type RecordNames } from "~/lib/privacy/scrub";
 import { formatPatientAge } from "~/lib/utils";
 
 export type SoapDraft = {
@@ -14,29 +15,18 @@ export type AnonymizedPayload = {
   history?: Array<SoapDraft & { daysAgo: number }>;
 };
 
-const CPF_RE = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
-const PHONE_RE = /\b(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{2}\)?[\s-]?)?\d{4,5}-?\d{4}\b/g;
-const EMAIL_RE = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
-
-function scrub(value: string) {
-  return value
-    .replace(CPF_RE, "[REMOVIDO]")
-    .replace(EMAIL_RE, "[REMOVIDO]")
-    .replace(PHONE_RE, "[REMOVIDO]")
-    .trim();
-}
-
-function scrubDraft(draft: SoapDraft): SoapDraft {
+function scrubDraft(draft: SoapDraft, names?: RecordNames): SoapDraft {
   return {
-    subjective: scrub(draft.subjective),
-    objective: scrub(draft.objective),
-    assessment: scrub(draft.assessment),
-    plan: scrub(draft.plan),
+    subjective: scrubClinicalText(draft.subjective, names),
+    objective: scrubClinicalText(draft.objective, names),
+    assessment: scrubClinicalText(draft.assessment, names),
+    plan: scrubClinicalText(draft.plan, names),
   };
 }
 
 export type AnonymizedTextInput = {
   patient: { birthDate: Date | string | null; gender: string };
+  names?: RecordNames;
   current: SoapDraft | null;
   history?: Array<{
     subjective: string;
@@ -66,7 +56,7 @@ export function buildAnonymizedSoapText(input: AnonymizedTextInput): AnonymizedT
   lines.push(`Paciente: ${ageLabel}, sexo ${input.patient.gender}`);
 
   if (input.current) {
-    const d = scrubDraft(input.current);
+    const d = scrubDraft(input.current, input.names);
     if (d.subjective) lines.push(`\nSubjetivo:\n${d.subjective}`);
     if (d.objective) lines.push(`\nObjetivo:\n${d.objective}`);
     if (d.assessment) lines.push(`\nAssessment:\n${d.assessment}`);
@@ -81,7 +71,7 @@ export function buildAnonymizedSoapText(input: AnonymizedTextInput): AnonymizedT
         0,
         Math.floor((now.getTime() - encounteredAt.getTime()) / (1000 * 60 * 60 * 24)),
       );
-      const d = scrubDraft(entry);
+      const d = scrubDraft(entry, input.names);
       const parts = [`\n[${daysAgo} dias atrás]`];
       if (d.subjective) parts.push(`S: ${d.subjective}`);
       if (d.objective) parts.push(`O: ${d.objective}`);
@@ -96,6 +86,7 @@ export function buildAnonymizedSoapText(input: AnonymizedTextInput): AnonymizedT
 
 export function anonymizePayload(input: {
   patient: { birthDate: Date | string | null; gender: string };
+  names?: RecordNames;
   current: SoapDraft | null;
   history?: Array<{
     subjective: string;
@@ -116,7 +107,7 @@ export function anonymizePayload(input: {
   return {
     ageLabel,
     sex: input.patient.gender,
-    current: input.current ? scrubDraft(input.current) : null,
+    current: input.current ? scrubDraft(input.current, input.names) : null,
     history: input.history?.length
       ? input.history.map((entry) => {
           const encounteredAt = new Date(entry.encounteredAt);
@@ -124,7 +115,7 @@ export function anonymizePayload(input: {
             0,
             Math.floor((now.getTime() - encounteredAt.getTime()) / (1000 * 60 * 60 * 24)),
           );
-          return { ...scrubDraft(entry), daysAgo };
+          return { ...scrubDraft(entry, input.names), daysAgo };
         })
       : undefined,
   };

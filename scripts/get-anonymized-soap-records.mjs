@@ -4,10 +4,7 @@ import { createWriteStream } from "node:fs";
 import { once } from "node:events";
 import { stdout } from "node:process";
 
-const CPF_RE = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
-const CNS_RE = /\b[1-9]\d{14}\b/g;
-const EMAIL_RE = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
-const PHONE_RE = /(?<!\d)(?:\+?55[\s.-]?)?(?:\(?\d{2}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4}(?!\d)/g;
+import { scrubClinicalText } from "../app/lib/privacy/scrub.ts";
 
 function readArg(flag) {
   const index = process.argv.indexOf(flag);
@@ -18,18 +15,9 @@ function printHelp() {
   console.log(`Exporta somente o texto dos registros SOAP, sem consultar Patient.
 
 Uso:
-  node scripts/get-anonymized-soap-records.mjs [--output caminho.txt] [--batch-size 500]
+  pnpm export:soap-anonymized -- [--output caminho.txt] [--batch-size 500]
 
 Sem --output, o TXT e escrito em stdout. Mensagens de progresso vao para stderr.`);
-}
-
-export function scrubClinicalText(value) {
-  return value
-    .replace(CPF_RE, "[REMOVIDO]")
-    .replace(CNS_RE, "[REMOVIDO]")
-    .replace(EMAIL_RE, "[REMOVIDO]")
-    .replace(PHONE_RE, "[REMOVIDO]")
-    .trim();
 }
 
 function formatRecord(note, recordNumber) {

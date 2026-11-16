@@ -38,7 +38,7 @@ export async function action({
 
   const patient = await prisma.patient.findUnique({
     where: { id: patientId },
-    select: { birthDate: true, gender: true },
+    select: { birthDate: true, gender: true, name: true, contacts: { select: { name: true } } },
   });
 
   if (!patient) {
@@ -96,6 +96,7 @@ export async function action({
 
   const anonymized = buildAnonymizedSoapText({
     patient,
+    names: { patientName: patient.name, contactNames: patient.contacts.map((contact) => contact.name) },
     current: imcTool ? objectiveOnly(draft) : draft,
     history: history.length
       ? imcTool

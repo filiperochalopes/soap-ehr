@@ -336,7 +336,8 @@ export function formatTimeZoneOffsetLabel(
   return `GMT${sign}${hours}:${padNumber(minutes)}`;
 }
 
-export function formatPatientAge(
+/** Completed years, months and days since birth; null without a birth date or when it is in the future. */
+export function getPatientAgeParts(
   birthDate: Date | string | null | undefined,
   options?: { now?: Date | string; timeZone?: string },
 ) {
@@ -352,7 +353,18 @@ export function formatPatientAge(
     return null;
   }
 
-  const age = diffDateParts(birth, today);
+  return diffDateParts(birth, today);
+}
+
+export function formatPatientAge(
+  birthDate: Date | string | null | undefined,
+  options?: { now?: Date | string; timeZone?: string },
+) {
+  const age = getPatientAgeParts(birthDate, options);
+
+  if (!age) {
+    return null;
+  }
 
   if (age.years > 5) {
     return formatCount(age.years, "ano", "anos");
