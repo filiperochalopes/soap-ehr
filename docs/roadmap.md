@@ -240,7 +240,7 @@ Direção visual: interface com aspecto de **terminal**, fundo verde-oliva escur
 | Coluna direita | título `PLUGINS` com engrenagem e duas abas. **Histórico**: linha do tempo com filtro `[S] [O] [A] [P] [+]`, todos ligados por padrão, `+` = narrativas. **Plugins**: scores e seções recolhíveis (Calculadoras clínicas, Anexos). |
 | Rodapé | `soap-ehr` e versão, "Prontuário pessoal", estado da conexão |
 
-**Agenda** (desenho do autor): janela com dia anterior / Hoje / próximo, visão Dia ou Semana e `+ Evento`. À esquerda, a lista do dia (horário, paciente, tipo · duração, status); à direita, "Editar evento" (paciente, título, data, início, término, status, observações; Excluir, Cancelar, Salvar). A linha selecionada tem o botão **Atender**, que abre o prontuário respeitando a trava de rascunho. O modelo `Appointment` ainda não tem título nem observações.
+**Agenda** (desenho do autor): janela com dia anterior / Hoje / próximo, visão Dia ou Semana e `+ Evento`. À esquerda, a lista do dia (horário, paciente, tipo · duração, status); à direita, "Editar evento" (paciente, data, início, término, status; Excluir, Cancelar, Salvar). A linha selecionada tem o botão **Atender**, que abre o prontuário respeitando a trava de rascunho. O protótipo não mostra título nem observações, porque o modelo `Appointment` não tem esses campos e eles não serão criados.
 
 **Janelas flutuantes.** Buscar paciente, Detalhes do paciente (editável, com abas Dados pessoais e Contato e endereço), Agenda e Pré-visualizar abrem como janelas arrastáveis pela alça `⋮⋮`, sem fundo escurecido: o formulário continua utilizável por trás. `esc` fecha a janela do topo; ⌘K / Ctrl+K abre a busca; ⌘↵ salva. No celular as janelas ocupam a tela inteira.
 
