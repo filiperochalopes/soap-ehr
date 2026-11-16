@@ -146,11 +146,11 @@ const PATIENTS = [
   { id: "0071", name: "Rafael Souza", social: "", birth: "30/09/1998", age: 28, sex: "Masculino", cpf: "***.552.017-**", mother: "Cláudia Souza", phone: "(71) 90000-0003", email: "rafael@example.com", address: "Rua Chile, 22 · Salvador/BA", history: [] },
 ];
 const AGENDA = [
-  { id: 1, time: "08:00", end: "08:30", pid: "0013", type: "Consulta", title: "Consulta de acompanhamento", status: "Concluído", notes: "" },
-  { id: 2, time: "08:30", end: "09:00", pid: "0057", type: "Retorno", title: "Retorno com exames", status: "Concluído", notes: "" },
-  { id: 3, time: "09:00", end: "09:45", pid: "0042", type: "Consulta", title: "Consulta de acompanhamento", status: "Confirmado", notes: "Revisão de exames e acompanhamento." },
-  { id: 4, time: "10:00", end: "10:30", pid: null, type: "", title: "", status: "Livre", notes: "" },
-  { id: 5, time: "10:30", end: "11:00", pid: "0071", type: "Consulta", title: "Primeira consulta", status: "Confirmado", notes: "" },
+  { id: 1, time: "08:00", end: "08:30", pid: "0013", type: "Consulta", status: "Concluído" },
+  { id: 2, time: "08:30", end: "09:00", pid: "0057", type: "Retorno", status: "Concluído" },
+  { id: 3, time: "09:00", end: "09:45", pid: "0042", type: "Consulta", status: "Confirmado" },
+  { id: 4, time: "10:00", end: "10:30", pid: null, type: "", status: "Livre" },
+  { id: 5, time: "10:30", end: "11:00", pid: "0071", type: "Consulta", status: "Confirmado" },
 ];
 const SOAP = [
   ["s", "01 / S", "Subjetivo", "Queixa, história, contexto…"],
@@ -528,12 +528,10 @@ function renderAgenda() {
         <div class="flex items-center"><h4 class="text-xl font-medium">Editar evento</h4><span class="ml-auto flex items-center gap-1 text-sm"><span class="size-1 rounded-full bg-accent"></span>${a.type}</span></div>
         <div class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
           <label class="col-span-2 block"><span class="text-sm text-accent">Paciente</span><span class="relative mt-0.5 block"><i data-icon="search" class="pointer-events-none absolute left-1.5 top-1 size-2.5 text-muted"></i><input value="${esc(p.name)}" class="h-5 w-full rounded border border-line bg-transparent pl-5 pr-2 outline-none focus:border-accent" /></span></label>
-          <label class="col-span-2 block"><span class="text-sm text-accent">Título</span><input value="${esc(a.title)}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
           <label class="col-span-2 block"><span class="text-sm text-accent">Data</span><span class="relative mt-0.5 block"><input value="12/11/2026" class="h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /><i data-icon="calendar" class="pointer-events-none absolute right-1.5 top-1 size-2.5 text-muted"></i></span></label>
           <label class="block"><span class="text-sm text-accent">Início</span><input value="${a.time}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
           <label class="block"><span class="text-sm text-accent">Término</span><input value="${a.end}" class="mt-0.5 h-5 w-full rounded border border-line bg-transparent px-2 outline-none focus:border-accent" /></label>
           <label class="col-span-2 block"><span class="text-sm text-accent">Status</span><span class="relative mt-0.5 block"><select class="h-5 w-full appearance-none rounded border border-line bg-transparent px-2 outline-none focus:border-accent">${["Agendado", "Confirmado", "Concluído", "Cancelado"].map((s) => `<option class="bg-panel" ${s === a.status ? "selected" : ""}>${s}</option>`).join("")}</select><i data-icon="chevron" class="pointer-events-none absolute right-1.5 top-1 size-2.5 text-muted"></i></span></label>
-          <label class="col-span-2 block"><span class="text-sm text-accent">Observações</span><textarea rows="2" class="mt-0.5 block w-full resize-none rounded border border-line bg-transparent px-2 py-0.5 outline-none focus:border-accent">${esc(a.notes)}</textarea></label>
         </div>
         <div class="mt-2 flex items-center gap-1">
           <a href="#" class="text-sm text-accent underline underline-offset-4" onclick="event.preventDefault();toast('Excluir evento (com confirmação).')">Excluir evento</a>
