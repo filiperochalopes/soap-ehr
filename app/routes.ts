@@ -7,6 +7,7 @@ export default [
   route("openapi.json", "routes/openapi.json.ts"),
   route("docs", "routes/docs.tsx"),
   route("integrations/docs/webhook", "routes/integrations.docs.webhook.ts"),
+  route("mcp", "routes/mcp.ts"),
   route("api/reminders/appointments", "routes/api.reminders.appointments.ts"),
   route(
     "api/reminders/appointments/:appointmentId/response",

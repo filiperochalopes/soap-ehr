@@ -26,11 +26,17 @@ async function main() {
   const { TOKEN_SCOPES, isTokenScope } = await import("../app/lib/auth-scope");
   const { prisma } = await import("../app/lib/prisma.server");
 
-  // `--scope reminders` issues a restricted token (reminder endpoints only). Default: full.
+  // `--scope reminders|report|agent` issues a restricted token (see app/lib/auth-scope.ts). Default: full.
   const scope = readArg("--scope") ?? "full";
   if (!isTokenScope(scope)) {
     throw new Error(`Invalid --scope "${scope}". Use one of: ${TOKEN_SCOPES.join(", ")}.`);
   }
+  const SCOPE_NOTES = {
+    full: "",
+    reminders: " (restricted: reminder endpoints only, cannot read patient records)",
+    report: " (restricted: reminder and rehydration endpoints; rehydration turns @P<id> into patient names, so keep it where the report is delivered, never in an agent)",
+    agent: " (restricted: /mcp only, de-identified data; cannot use the interface or the FHIR API)",
+  } as const;
 
   let userIdStr = readArg("--userId");
 
@@ -83,7 +89,7 @@ async function main() {
   console.log(`User ID: ${user.id}`);
   console.log(`Name: ${user.fullName}`);
   console.log(`CRM: ${user.crm}/${user.crmUf}`);
-  console.log(`Scope: ${scope}${scope === "full" ? "" : " (restricted: cannot read patient records)"}`);
+  console.log(`Scope: ${scope}${SCOPE_NOTES[scope]}`);
   console.log("");
   console.log("Token");
   console.log(rawToken);

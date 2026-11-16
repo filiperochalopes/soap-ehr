@@ -147,8 +147,9 @@ export async function requireApiUser(request: Request) {
 }
 
 /**
- * API guard for endpoints that a restricted token may reach (today: the reminder endpoints).
- * A `full` token passes too; a token of any other scope passes only for its own scope.
+ * API guard for endpoints that a restricted token may reach (the reminder endpoints, `/mcp`).
+ * A `full` token passes where `scopeAllows` says so (not for `/mcp`); any other scope passes
+ * only for what it may reach.
  */
 export async function requireApiScope(request: Request, requiredScope: TokenScope) {
   const auth = await getAuthContext(request, requiredScope);
