@@ -46,7 +46,8 @@ async function withRecordStats(
   );
 }
 
-async function findCurrentPatient(patientId: number) {
+/** The active patient a cadastro resolves to, following merges; null when unknown, inactive or circular. */
+export async function findCurrentPatient(patientId: number) {
   const visited = new Set<number>();
   let currentId = patientId;
 

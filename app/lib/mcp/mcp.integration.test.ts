@@ -11,7 +11,8 @@ import type { Prisma } from "@prisma/client";
  *
  * It covers what the fakes of the other MCP tests cannot: real tokens and scopes, the merge chain,
  * the record count, the Prisma queries behind `listar_registros` and `listar_agenda`, the names
- * taken from the patient, the merged cadastro and the contacts, and the audit rows of the route.
+ * taken from the patient, the merged cadastro and the contacts, the rehydration endpoint with its
+ * scope rules, and the audit rows of the routes.
  */
 const url = process.env.INTEGRATION_DATABASE_URL;
 const skip = url ? false : "INTEGRATION_DATABASE_URL is not set";
@@ -32,6 +33,7 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
   const { createNarrativeComposition, createSoapComposition } = await import("~/lib/ehr/compositions.server");
   const { mergePatientRecords } = await import("~/lib/patients.server");
   const route = await import("~/routes/mcp");
+  const rehydrateRoute = await import("~/routes/api.agent.rehydrate");
 
   const patientIds: number[] = [];
   const user = await prisma.authUser.create({
@@ -239,7 +241,43 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
     ]);
     assert.doesNotMatch(agendaText, new RegExp(`marina|almeida|duplicada|${TAG}`, "i"));
 
+    // rehydration: only a report (or full) token; the answer has the names, so the agent token must not reach it
+    const rehydrate = async (token: string | null, texto: string) => {
+      const request = new Request("http://ehr.test/api/agent/rehydrate", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ texto }),
+      });
+      try {
+        return await rehydrateRoute.action({ request });
+      } catch (thrown) {
+        if (thrown instanceof Response) {
+          return thrown;
+        }
+        throw thrown;
+      }
+    };
+    const report = `Hoje: @P${survivor.id}, @P${duplicate.id}, @P${inactive.id} e @P${tied.id}.`;
+    const delivered = await rehydrate(tokens.report, report);
+    assert.equal(delivered.status, 200);
+    assert.equal(delivered.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await delivered.json(), {
+      texto: `Hoje: Marina ${TAG} Almeida (42 anos), Marina ${TAG} Almeida (42 anos), @P${inactive.id} [não encontrado] e Empate ${TAG} (26 anos).`,
+      mencoes: 3, // the merged cadastro answers as its survivor
+      nao_encontradas: [inactive.id],
+    });
+    assert.equal((await rehydrate(tokens.full, report)).status, 200);
+    for (const refused of [tokens.agent, tokens.reminders, null]) {
+      assert.equal((await rehydrate(refused, report)).status, 401);
+    }
+
     // audit rows: counts and ids only
+    const rehydrateAudits = await prisma.auditLog.findMany({ where: { userId: user.id, action: "agent.rehydrate" } });
+    assert.equal(rehydrateAudits.length, 2); // the report token and the full token; refused calls leave no row
+    const meta = rehydrateAudits[0].metadata as { characters: number; mentions: number; notFound: number; tokenId: number };
+    assert.deepEqual([meta.characters, meta.mentions, meta.notFound, typeof meta.tokenId], [report.length, 3, 1, "number"]);
+    assert.doesNotMatch(JSON.stringify(rehydrateAudits), new RegExp(`marina|almeida|${TAG}|@P`, "i"));
+
     const audits = await prisma.auditLog.findMany({ where: { userId: user.id, category: "mcp" } });
     assert.ok(audits.length >= 5);
     assert.ok(audits.every((row) => /^mcp\.tool\.(localizar_paciente|listar_registros|listar_agenda)$/.test(row.action)));
