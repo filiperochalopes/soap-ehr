@@ -69,6 +69,19 @@ pnpm create:token --userId <id do usuário> --scope report
 
 Revogar: `pnpm revoke:token`.
 
+**Em produção** a imagem do app só tem o servidor (sem `app/` nem `tsx`), então `pnpm create:token` não roda dentro dela. Use um container descartável, construído do estágio `build` do Dockerfile, com o ambiente efetivo do container que está no ar. Numa sessão `ssh -t`, na pasta do app:
+
+```bash
+docker build --target build -t soap-ehr-tools .
+F=$(mktemp) && chmod 600 "$F"
+docker exec soap-ehr env | grep -v -E '^(PATH|HOME|HOSTNAME|PWD|NODE_VERSION|YARN_VERSION|SHLVL|_|TERM)=' > "$F"
+docker run --rm -it --network data --env-file "$F" soap-ehr-tools \
+  pnpm create:token --userId <id do usuário> --scope agent
+rm -f "$F"
+```
+
+O token aparece uma vez, no seu terminal. O arquivo temporário tem segredos: apague-o em seguida, como acima. O `--env-file` cru do `.env` não serve, porque o Compose monta o `environment` do app com valores padrão e interpolações que ele não reproduz.
+
 Os escopos `agent` e `report` exigem a migração `20261115000000_token_scopes_report_and_agent` (só alarga uma restrição; nenhuma linha muda). Ela é aplicada pelo `prisma migrate deploy` que o container executa ao subir.
 
 ## 4. Conectar o Claude Code
