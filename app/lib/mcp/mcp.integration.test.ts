@@ -9,8 +9,9 @@ import type { Prisma } from "@prisma/client";
  * applied (see reminders.integration.test.ts for the docker recipe). It refuses any URL that is
  * not localhost and deletes the rows it creates.
  *
- * It covers what the fakes of mcp.http.test.ts cannot: real tokens and scopes, the merge chain,
- * the record count and the audit rows written by the route.
+ * It covers what the fakes of the other MCP tests cannot: real tokens and scopes, the merge chain,
+ * the record count, the Prisma queries behind `listar_registros` and `listar_agenda`, the names
+ * taken from the patient, the merged cadastro and the contacts, and the audit rows of the route.
  */
 const url = process.env.INTEGRATION_DATABASE_URL;
 const skip = url ? false : "INTEGRATION_DATABASE_URL is not set";
@@ -28,7 +29,7 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
   const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
   const { prisma } = await import("~/lib/prisma.server");
   const { addTokenToUser, requireApiScope } = await import("~/lib/auth.server");
-  const { createSoapComposition } = await import("~/lib/ehr/compositions.server");
+  const { createNarrativeComposition, createSoapComposition } = await import("~/lib/ehr/compositions.server");
   const { mergePatientRecords } = await import("~/lib/patients.server");
   const route = await import("~/routes/mcp");
 
@@ -72,12 +73,20 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
       report: (await addTokenToUser(user.id, "report")).rawToken,
     };
 
-    const make = async (name: string, birth: string, active = true) => {
-      const patient = await prisma.patient.create({ data: { name, gender: "female", birthDate: new Date(birth), active } });
+    const make = async (name: string, birth: string, active = true, contactName?: string) => {
+      const patient = await prisma.patient.create({
+        data: {
+          name,
+          gender: "female",
+          birthDate: new Date(birth),
+          active,
+          ...(contactName ? { contacts: { create: [{ name: contactName, relationship: "mother" }] } } : {}),
+        },
+      });
       patientIds.push(patient.id);
       return patient;
     };
-    const survivor = await make(`Marina ${TAG} Almeida`, "1984-08-14");
+    const survivor = await make(`Marina ${TAG} Almeida`, "1984-08-14", true, "Rosalva Prates");
     const duplicate = await make(`Marina ${TAG} Almeida Duplicada`, "1984-08-14");
     const homonym = await make(`Marina ${TAG} Almeida`, "1990-03-02");
     const inactive = await make(`Inativa ${TAG}`, "1970-01-01", false);
@@ -88,6 +97,14 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
       });
     await note(survivor.id, "2026-09-01T12:00:00Z");
     await note(duplicate.id, "2026-10-28T12:00:00Z");
+    await createSoapComposition({
+      assessment: "HAS", authorUserId: user.id, encounteredAt: new Date("2026-10-05T12:00:00Z"), objective: "PA 130x85", patientId: survivor.id,
+      plan: "Manter", subjective: `Marina ${TAG} Almeida relata dor. A mãe Rosalva veio. CPF 123.456.789-09. Ligou a Duplicada.`,
+    });
+    await createNarrativeComposition({
+      authorUserId: user.id, encounteredAt: new Date("2026-10-06T12:00:00Z"), patientId: duplicate.id,
+      sections: [{ title: "Telefonema", text: "Falou com Rosalva sobre exames." }],
+    });
     await mergePatientRecords({ actorUserId: user.id, sourcePatientId: duplicate.id, targetPatientId: survivor.id });
 
     // a note amended once has two versions but is still one record
@@ -117,8 +134,8 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
     // by id: a merged cadastro answers as the survivor, counting both histories
     const viaMerged = await locate(client, { id: duplicate.id });
     assert.deepEqual(viaMerged.candidatos.map((c) => c.id), [survivor.id]);
-    assert.equal(viaMerged.candidatos[0].total_registros, 2);
-    assert.equal(viaMerged.candidatos[0].ultimo_registro, "2026-10-28T12:00:00.000Z");
+    assert.equal(viaMerged.candidatos[0].total_registros, 4); // the amended note counts once
+    assert.equal(viaMerged.candidatos[0].ultimo_registro, "2026-10-28T09:00"); // local time, UTC-3
     assert.equal(viaMerged.candidatos[0].mencao, `@P${survivor.id}`);
     assert.equal(viaMerged.candidatos[0].iniciais, "MZA"); // Marina + the tag word + Almeida
 
@@ -141,11 +158,94 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
     const everything = JSON.stringify([viaMerged, byName, byBirth]);
     assert.doesNotMatch(everything, new RegExp(`marina|almeida|${TAG}|1984-08-14|1990-03-02`, "i"));
 
+    // listar_registros: asking by the merged cadastro answers as the survivor, with every history, newest first
+    const read = async (args: Record<string, unknown>) => {
+      const result = await client.callTool({ name: "listar_registros", arguments: args });
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      return {
+        isError: Boolean(result.isError),
+        text,
+        data: JSON.parse(text) as {
+          paciente: { id: number };
+          registros: Array<{ tipo: string; data: string; secoes: unknown }>;
+          proximo_cursor: string | null;
+        },
+      };
+    };
+    const history = await read({ id: duplicate.id });
+    assert.equal(history.data.paciente.id, survivor.id);
+    assert.deepEqual(history.data.registros.map((r) => [r.tipo, r.data]), [
+      ["soap", "2026-10-28T09:00"],
+      ["narrativa", "2026-10-06T09:00"],
+      ["soap", "2026-10-05T09:00"],
+      ["soap", "2026-09-01T09:00"], // two versions, one record
+    ]);
+    assert.deepEqual(history.data.registros[1].secoes, [{ titulo: "Telefonema", texto: "Falou com [CONTATO] sobre exames." }]);
+    assert.deepEqual((history.data.registros[2].secoes as Record<string, string>).S, "[PACIENTE] relata dor. A mãe [CONTATO] veio. CPF [REMOVIDO]. Ligou a [PACIENTE].");
+    // title ("... note for <name>"), composer and the names of patient, merged cadastro and contact never leave
+    assert.doesNotMatch(history.text, new RegExp(`marina|almeida|duplicada|rosalva|${TAG}|123\\.456|note for|Dr `, "i"));
+
+    // filters and paging reach the database query
+    assert.deepEqual((await read({ id: survivor.id, tipo: "narrativa" })).data.registros.map((r) => r.tipo), ["narrativa"]);
+    assert.deepEqual((await read({ id: survivor.id, desde: "2026-10-05", ate: "2026-10-06" })).data.registros.map((r) => r.data), ["2026-10-06T09:00", "2026-10-05T09:00"]);
+    const firstPage = await read({ id: survivor.id, limite: 3 });
+    assert.equal(firstPage.data.registros.length, 3);
+    assert.ok(firstPage.data.proximo_cursor);
+    const secondPage = await read({ id: survivor.id, limite: 3, cursor: firstPage.data.proximo_cursor });
+    assert.deepEqual(secondPage.data.registros.map((r) => r.data), ["2026-09-01T09:00"]);
+    assert.equal(secondPage.data.proximo_cursor, null);
+    assert.equal((await client.callTool({ name: "listar_registros", arguments: { id: inactive.id } })).isError, true);
+
+    // notes at the same instant are paged by id: none repeated, none skipped
+    const tied = await make(`Empate ${TAG}`, "2000-01-01");
+    for (const subjective of ["um", "dois", "tres"]) {
+      await createSoapComposition({
+        assessment: "A", authorUserId: user.id, encounteredAt: new Date("2026-10-07T12:00:00Z"), objective: "O", patientId: tied.id, plan: "P", subjective,
+      });
+    }
+    const tiedSeen: string[] = [];
+    let tiedCursor: string | undefined;
+    for (let page = 0; page < 5; page += 1) {
+      const { data } = await read({ id: tied.id, limite: 1, ...(tiedCursor ? { cursor: tiedCursor } : {}) });
+      tiedSeen.push(...data.registros.map((r) => (r as unknown as { registro_id: string }).registro_id));
+      tiedCursor = data.proximo_cursor ?? undefined;
+      if (!tiedCursor) break;
+    }
+    assert.equal(tiedSeen.length, 3);
+    assert.equal(new Set(tiedSeen).size, 3);
+
+    // listar_agenda: the day in the clinic's zone; a merged cadastro answers as the survivor; an inactive one is null
+    const book = async (patientId: number, start: string) => {
+      const row = await prisma.appointment.create({
+        data: { patientId, start: new Date(start), end: new Date(new Date(start).getTime() + 30 * 60_000), status: "booked", appointmentType: "routine" },
+      });
+      return row.id;
+    };
+    const mine = [
+      await book(survivor.id, "2030-03-05T03:00:00Z"), // exactly 00:00 local: in
+      await book(survivor.id, "2030-03-05T12:00:00Z"),
+      await book(inactive.id, "2030-03-05T14:00:00Z"),
+      await book(duplicate.id, "2030-03-05T15:00:00Z"),
+    ];
+    await book(survivor.id, "2030-03-06T03:00:00Z"); // 00:00 of the next local day: out
+    const agendaResult = await client.callTool({ name: "listar_agenda", arguments: { data: "2030-03-05" } });
+    const agendaText = (agendaResult.content as Array<{ text: string }>)[0].text;
+    const consultas = (JSON.parse(agendaText) as { consultas: Array<{ consulta_id: number; inicio: string; status: string; confirmacao: string; paciente: { id: number } | null }> }).consultas.filter((c) => mine.includes(c.consulta_id));
+    assert.deepEqual(consultas.map((c) => [c.inicio, c.paciente?.id ?? null, c.status, c.confirmacao]), [
+      ["2030-03-05T00:00", survivor.id, "booked", "pending"],
+      ["2030-03-05T09:00", survivor.id, "booked", "pending"],
+      ["2030-03-05T11:00", null, "booked", "pending"],
+      ["2030-03-05T12:00", survivor.id, "booked", "pending"],
+    ]);
+    assert.doesNotMatch(agendaText, new RegExp(`marina|almeida|duplicada|${TAG}`, "i"));
+
     // audit rows: counts and ids only
     const audits = await prisma.auditLog.findMany({ where: { userId: user.id, category: "mcp" } });
     assert.ok(audits.length >= 5);
-    assert.ok(audits.every((row) => row.action === "mcp.tool.localizar_paciente"));
-    assert.doesNotMatch(JSON.stringify(audits), new RegExp(`marina|almeida|${TAG}`, "i"));
+    assert.ok(audits.every((row) => /^mcp\.tool\.(localizar_paciente|listar_registros|listar_agenda)$/.test(row.action)));
+    assert.ok(audits.some((row) => row.action === "mcp.tool.listar_registros" && row.entityId === String(survivor.id)));
+    assert.ok(audits.some((row) => row.action === "mcp.tool.listar_agenda"));
+    assert.doesNotMatch(JSON.stringify(audits), new RegExp(`marina|almeida|duplicada|rosalva|${TAG}|relata dor`, "i"));
 
     // scope rules of the real token check, on the reminder endpoint guard
     const asRequest = (token: string) => new Request("http://ehr.test/x", { headers: { Authorization: `Bearer ${token}` } });
@@ -156,6 +256,8 @@ test("the /mcp route with real tokens, merged cadastros, record counts and audit
     await assert.rejects(requireApiScope(asRequest(tokens.report), "full"), (e) => e instanceof Response && e.status === 401);
     await assert.rejects(requireApiScope(asRequest(tokens.full), "agent"), (e) => e instanceof Response && e.status === 401);
   } finally {
+    await prisma.appointment.deleteMany({ where: { patientId: { in: patientIds } } });
+    await prisma.contact.deleteMany({ where: { patientId: { in: patientIds } } });
     await prisma.auditLog.deleteMany({ where: { userId: user.id } });
     await prisma.authToken.deleteMany({ where: { userId: user.id } });
     await prisma.compositionVersion.deleteMany({ where: { composerUserId: user.id } });

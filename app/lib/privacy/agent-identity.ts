@@ -35,3 +35,17 @@ export function agentInitials(name: string): string {
 export function agentMention(patientId: number): string {
   return `@P${patientId}`;
 }
+
+/** How every MCP tool shows a patient. Built field by field, so a new column never leaks by being spread. */
+export function toAgentPatient(
+  patient: { id: number; name: string; gender: string; birthDate: Date | string | null },
+  options?: { now?: Date | string; timeZone?: string },
+) {
+  return {
+    id: patient.id,
+    mencao: agentMention(patient.id),
+    iniciais: agentInitials(patient.name),
+    idade: agentAge(patient.birthDate, options),
+    sexo: patient.gender,
+  };
+}

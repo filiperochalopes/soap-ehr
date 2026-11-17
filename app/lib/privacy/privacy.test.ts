@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { agentAge, agentInitials, agentMention } from "./agent-identity";
+import { agentAge, agentInitials, agentMention, toAgentPatient } from "./agent-identity";
 import { buildAnonymizedSoapText } from "../soap-plugins/anonymize";
 import { scrubClinicalText } from "./scrub";
 
@@ -120,4 +120,20 @@ test("scrub leaves words shorter than three letters alone", () => {
 test("scrub removes a decomposed accent that ends the name", () => {
   const out = scrubClinicalText("Jose\u0301 chegou", { patientName: "José" });
   assert.equal(out, "[PACIENTE] chegou");
+});
+
+test("agent patient carries only the mention, initials, age and sex", () => {
+  const patient = { id: 42, name: "Marina Prates Almeida", gender: "female", birthDate: new Date("1984-08-14"), cpf: "123" };
+  const out = toAgentPatient(patient, { now: NOW });
+
+  assert.deepEqual(out, { id: 42, mencao: "@P42", iniciais: "MPA", idade: "42 anos", sexo: "female" });
+  assert.doesNotMatch(JSON.stringify(out), /marina|prates|almeida|1984|123/i);
+});
+
+test("scrub accepts several names for the patient, as when cadastros were merged", () => {
+  const out = scrubClinicalText("Marina e Marinha Prates e Rosa", {
+    patientName: ["Marina Almeida", "Marinha Prates"],
+    contactNames: ["Rosa"],
+  });
+  assert.equal(out, "[PACIENTE] e [PACIENTE] e [CONTATO]");
 });

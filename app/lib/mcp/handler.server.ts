@@ -1,7 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-import { createMcpServer, type McpToolAudit } from "./server";
-import type { PatientLookupRepo } from "./tools/localizar-paciente";
+import { createMcpServer, type McpServerDeps, type McpToolAudit } from "./server";
 
 export type McpAuditEntry = McpToolAudit & { tokenId: number; userId: number };
 
@@ -10,9 +9,8 @@ export type McpRequestDeps = {
   /** Throws a Response (401) unless the caller holds a token that may reach `/mcp`. */
   authenticate: (request: Request) => Promise<{ tokenId: number; user: { id: number } }>;
   audit: (entry: McpAuditEntry) => Promise<void>;
-  lookup: PatientLookupRepo;
   now?: () => Date;
-};
+} & Pick<McpServerDeps, "agenda" | "lookup" | "records" | "timeZone">;
 
 /**
  * POST /mcp: the Streamable HTTP transport of the MCP, stateless (one server per request, JSON
@@ -29,7 +27,10 @@ export async function handleMcpRequest(request: Request, deps: McpRequestDeps): 
   const auth = await deps.authenticate(request);
 
   const server = createMcpServer({
+    agenda: deps.agenda,
     lookup: deps.lookup,
+    records: deps.records,
+    timeZone: deps.timeZone,
     audit: (entry) => deps.audit({ ...entry, tokenId: auth.tokenId, userId: auth.user.id }),
     now: deps.now ?? (() => new Date()),
   });

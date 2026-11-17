@@ -20,7 +20,8 @@ const MIN_NAME_WORD_LENGTH = 3;
 const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/;
 
 export type RecordNames = {
-  patientName?: string | null;
+  /** One name, or several when cadastros of the same person were merged. */
+  patientName?: string | readonly string[] | null;
   contactNames?: readonly string[];
 };
 
@@ -39,8 +40,11 @@ function buildDictionary(names: RecordNames): Map<string, Label> {
       dictionary.set(word, "[CONTATO]");
     }
   }
-  for (const word of nameWords(names.patientName)) {
-    dictionary.set(word, "[PACIENTE]"); // the patient wins when a surname is shared
+  const patientNames = typeof names.patientName === "string" ? [names.patientName] : (names.patientName ?? []);
+  for (const patientName of patientNames) {
+    for (const word of nameWords(patientName)) {
+      dictionary.set(word, "[PACIENTE]"); // the patient wins when a surname is shared
+    }
   }
   return dictionary;
 }
