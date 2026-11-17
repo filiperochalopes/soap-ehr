@@ -86,6 +86,7 @@ React Router v7 · React 19 · TypeScript · Prisma · PostgreSQL 17 · Tailwind
 - [Guia de desenvolvimento e operação](docs/desenvolvimento.md): variáveis de ambiente, Docker, Prisma, importação FHIR
 - [Arquitetura V2](docs/architecture-v2.md)
 - [Roadmap](docs/roadmap.md): versões 0.3 (MCP + anonimização + layout) a 0.6 (OAuth)
+- [Servidor MCP: ferramentas, limites, riscos aceitos, tokens e como conectar](docs/mcp.md)
 - [Plano do MVP do MCP (v0.3)](docs/v0.3-mcp-plan.md)
 - [Projeção OMOP](docs/omop.md)
 - [Requisitos SBIS S-RES 5.2](docs/S_RES_5_2.md) e [matriz de conformidade](docs/S_RES_5_2_CONFORME.md)
